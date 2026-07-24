@@ -1,665 +1,380 @@
 /* ==========================================================================
-   ZGUARD - Interactive Application Engine & State Sync UI Controller
+   ZGUARD — Industrial Single-Device Security Dashboard UI Controller
    ========================================================================== */
 
 document.addEventListener('DOMContentLoaded', () => {
-    initCanvasMesh();
-    initPhasedStepper();
-    initGanttTimeline();
-    initMetricsCounter();
-    initRiskSimulator();
-    initDeploymentTabs();
-    initCalculatorForm();
+    initNavigationTabs();
+    initSetupForm();
+    initRfidLogFilters();
     initMobileNav();
 
-    // Initialize 3D Device Twin Component
+    // Initialize 3D Device Twin Canvas Panel
     init3DDeviceTwin('deviceTwinContainer');
 
-    // Initialize Firebase Client & Subscribe State Bus
+    // Initialize Firebase Client & Subscribe to State Bus
     initFirebaseClient();
     subscribeZGuardState(renderZGuardUI);
 });
 
 /* ==========================================================================
-   1. Realtime UI Sync Engine (Handles Waiting, Live, Offline States)
+   1. Tab Navigation Controller
+   ========================================================================== */
+function initNavigationTabs() {
+    const tabBtns = document.querySelectorAll('.nav-tab-btn');
+    const tabPanes = document.querySelectorAll('.tab-pane');
+
+    tabBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const targetId = btn.dataset.tab;
+
+            tabBtns.forEach(b => b.classList.remove('active'));
+            tabPanes.forEach(p => p.classList.remove('active'));
+
+            btn.classList.add('active');
+            const targetPane = document.getElementById(targetId);
+            if (targetPane) targetPane.classList.add('active');
+        });
+    });
+}
+
+/* ==========================================================================
+   2. Device Setup Credentials Form Controller
+   ========================================================================== */
+function initSetupForm() {
+    const form = document.getElementById('setupForm');
+    const apiKeyInput = document.getElementById('cfgApiKey');
+    const dbUrlInput = document.getElementById('cfgDbUrl');
+    const projectIdInput = document.getElementById('cfgProjectId');
+    const deviceIdInput = document.getElementById('cfgDeviceId');
+
+    // Auto-fill stored credentials if existing in localStorage
+    const stored = getStoredCredentials();
+    if (stored) {
+        if (apiKeyInput) apiKeyInput.value = stored.apiKey || "";
+        if (dbUrlInput) dbUrlInput.value = stored.databaseURL || "";
+        if (projectIdInput) projectIdInput.value = stored.projectId || "";
+        if (deviceIdInput) deviceIdInput.value = stored.deviceId || "ESP32-01";
+    }
+
+    if (form) {
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const apiKey = apiKeyInput.value.trim();
+            const dbUrl = dbUrlInput.value.trim();
+            const projectId = projectIdInput.value.trim();
+            const deviceId = deviceIdInput.value.trim() || "ESP32-01";
+
+            if (!apiKey || !dbUrl) {
+                alert("Please enter a valid Firebase API Key and Database URL.");
+                return;
+            }
+
+            saveFirebaseCredentials(apiKey, dbUrl, projectId, deviceId);
+            alert(`Firebase credentials saved! Listening to target device: ${deviceId}`);
+        });
+    }
+}
+
+/* ==========================================================================
+   3. Realtime UI Renderer & State Subscriber
    ========================================================================== */
 function renderZGuardUI(state) {
     const statusPill = document.getElementById('globalStatusPill');
     const statusText = document.getElementById('connectionStatusText');
-    const twinStatusDot = document.getElementById('twinStatusDot');
-    const twinStatusLabel = document.getElementById('twinStatusLabel');
+    const targetDeviceTag = document.getElementById('targetDeviceTag');
+    const footerDevId = document.getElementById('footerDevId');
+    const monConnIndicator = document.getElementById('monConnIndicator');
 
-    const liveVolts = document.getElementById('liveVolts');
-    const liveAmps = document.getElementById('liveAmps');
-    const liveRelayStatus = document.getElementById('liveRelayStatus');
-    const liveMotorStatus = document.getElementById('liveMotorStatus');
-    const liveRfidUid = document.getElementById('liveRfidUid');
-    const liveRfidStatus = document.getElementById('liveRfidStatus');
-    const btnCutRelay = document.getElementById('btnCutRelay');
-    const cutRelayBtnText = document.getElementById('cutRelayBtnText');
+    if (targetDeviceTag) targetDeviceTag.textContent = state.deviceId;
+    if (footerDevId) footerDevId.textContent = state.deviceId;
 
-    // 1. Connection Status State Machine
+    // A. Connection State Handling
     if (state.connectionStatus === "waiting") {
         if (statusPill) statusPill.className = "badge-pill";
-        if (statusText) statusText.textContent = "Waiting for ESP32-01 connection...";
-        if (twinStatusDot) twinStatusDot.style.background = "var(--cyan-400)";
-        if (twinStatusLabel) twinStatusLabel.textContent = "WAITING FOR CONNECTION";
+        if (statusText) statusText.textContent = `Waiting for ${state.deviceId} connection...`;
+        if (monConnIndicator) monConnIndicator.textContent = `Waiting for ${state.deviceId} connection...`;
     } 
     else if (state.connectionStatus === "live") {
         if (statusPill) statusPill.className = "badge-pill status-live";
-        if (statusText) statusText.textContent = "Live (ESP32-01 Connected)";
-        if (twinStatusDot) twinStatusDot.style.background = "var(--emerald-400)";
-        if (twinStatusLabel) twinStatusLabel.textContent = "LIVE — ONLINE";
+        if (statusText) statusText.textContent = `Live (${state.deviceId} Connected)`;
+        if (monConnIndicator) {
+            monConnIndicator.textContent = `LIVE TELEMETRY (${state.deviceId})`;
+            monConnIndicator.className = "connection-state-indicator text-emerald";
+        }
     } 
     else if (state.connectionStatus === "offline") {
         if (statusPill) statusPill.className = "badge-pill status-offline";
-        if (statusText) statusText.textContent = "Offline (ESP32-01 Stale >10s)";
-        if (twinStatusDot) twinStatusDot.style.background = "var(--amber-500)";
-        if (twinStatusLabel) twinStatusLabel.textContent = "DEVICE OFFLINE";
+        if (statusText) statusText.textContent = `Offline (${state.deviceId} Stale >10s)`;
+        if (monConnIndicator) {
+            monConnIndicator.textContent = `DEVICE OFFLINE (${state.deviceId})`;
+            monConnIndicator.className = "connection-state-indicator text-amber";
+        }
     }
 
-    // 2. Render Telemetry Mini-Cards
+    // B. Overview Page Metrics
+    const ovHealth = document.getElementById('overviewHealthScore');
+    const ovOnline = document.getElementById('overviewOnlineDevices');
+    const ovTrusted = document.getElementById('overviewTrustedDevices');
+    const ovUnauth = document.getElementById('overviewUnauthCount');
+
+    if (ovHealth) ovHealth.textContent = `${state.healthScore} %`;
+    if (ovOnline) ovOnline.textContent = `${state.onlineDevices} / 1`;
+    if (ovTrusted) ovTrusted.textContent = `${state.trustedDevices}`;
+    if (ovUnauth) ovUnauth.textContent = `${state.unauthorizedToday}`;
+
+    // C. 3D Twin Sidebar & Risk Ring
+    const twinDevId = document.getElementById('twinDevId');
+    const twinVolts = document.getElementById('twinVolts');
+    const twinCurrent = document.getElementById('twinCurrent');
+    const twinRelay = document.getElementById('twinRelay');
+    const twinMotor = document.getElementById('twinMotor');
+    const twinLastSeen = document.getElementById('twinLastSeen');
+    const twinRiskBadge = document.getElementById('twinRiskBadge');
+
+    if (twinDevId) twinDevId.textContent = state.deviceId;
     if (state.live) {
-        if (liveVolts) liveVolts.textContent = `${state.live.voltage} V`;
-        if (liveAmps) liveAmps.textContent = `${state.live.current} A`;
-        if (liveRelayStatus) {
-            liveRelayStatus.textContent = state.live.relay_status || "OFF";
-            liveRelayStatus.className = state.live.relay_status === "ON" ? "mini-value text-emerald" : "mini-value text-rose";
-        }
-        if (liveMotorStatus) liveMotorStatus.textContent = `Motor: ${state.live.motor_status || "STOPPED"}`;
-        if (liveRfidUid) liveRfidUid.textContent = state.live.rfid_last_uid || "None";
-        if (liveRfidStatus) {
-            liveRfidStatus.textContent = state.live.rfid_last_status || "No Scan";
-            liveRfidStatus.className = state.live.rfid_last_status === "AUTHORIZED" ? "mini-sub text-emerald" : "mini-sub text-rose";
-        }
-
-        // Toggle Cut Relay Button Label
-        if (cutRelayBtnText) {
-            cutRelayBtnText.textContent = state.live.relay_status === "ON" ? "Emergency Relay Cut" : "Enable Relay Power";
+        if (twinVolts) twinVolts.textContent = `${state.live.voltage || '--'} V`;
+        if (twinCurrent) twinCurrent.textContent = `${state.live.current || '--'} A`;
+        if (twinRelay) twinRelay.textContent = state.live.relay_status || '--';
+        if (twinMotor) twinMotor.textContent = state.live.motor_status || '--';
+        if (twinLastSeen) {
+            const timeStr = state.live.last_seen ? new Date(state.live.last_seen).toLocaleTimeString() : '--';
+            twinLastSeen.textContent = timeStr;
         }
     }
 
-    // Bind Emergency Relay Action
-    if (btnCutRelay) {
-        btnCutRelay.onclick = () => {
-            const currentRelay = state.live ? state.live.relay_status : "ON";
-            const targetCmd = currentRelay === "ON" ? "DISABLE_RELAY" : "ENABLE_RELAY";
-            sendDeviceCommand(targetCmd);
-        };
+    // D. Monitoring Panel Telemetry & Remote Control Buttons
+    const monVoltage = document.getElementById('monVoltage');
+    const monCurrent = document.getElementById('monCurrent');
+    const monRelay = document.getElementById('monRelay');
+    const monMotor = document.getElementById('monMotor');
+    const btnCutRelayMain = document.getElementById('btnCutRelayMain');
+    const btnEnableRelayMain = document.getElementById('btnEnableRelayMain');
+
+    if (state.live) {
+        if (monVoltage) monVoltage.textContent = `${state.live.voltage || '--'} V`;
+        if (monCurrent) monCurrent.textContent = `${state.live.current || '--'} A`;
+        if (monRelay) {
+            monRelay.textContent = state.live.relay_status || '--';
+            monRelay.className = state.live.relay_status === "ON" ? "mini-value text-emerald" : "mini-value text-rose";
+        }
+        if (monMotor) {
+            monMotor.textContent = state.live.motor_status || '--';
+            monMotor.className = state.live.motor_status === "RUNNING" ? "mini-value text-emerald" : "mini-value text-dim";
+        }
     }
 
-    // 3. Render RFID Scan Log Stream Table
-    renderRfidLogs(state.rfidLogs);
+    if (btnCutRelayMain) {
+        btnCutRelayMain.onclick = () => sendDeviceCommand("DISABLE_RELAY");
+    }
+    if (btnEnableRelayMain) {
+        btnEnableRelayMain.onclick = () => sendDeviceCommand("ENABLE_RELAY");
+    }
 
-    // 4. Render Security Events & Risk Score Ring
-    renderSecurityEvents(state.securityEvents);
+    // E. Render RFID Logs & Filters
+    renderFilteredRfidLogs(state.rfidLogs);
+
+    // F. Render Fault Detection Status
+    renderFaultDetection(state);
+
+    // G. Render AI Agents & Event Stream
+    renderAiAgents(state);
 }
 
-function renderRfidLogs(logs) {
-    const tableBody = document.getElementById('rfidLogTableBody');
-    const badge = document.getElementById('rfidCountBadge');
+/* ==========================================================================
+   4. Real-time RFID Log Table Renderer with Search & Status Filters
+   ========================================================================== */
+function initRfidLogFilters() {
+    const searchInput = document.getElementById('filterSearch');
+    const statusSelect = document.getElementById('filterStatus');
+    const resetBtn = document.getElementById('btnResetFilters');
+
+    if (searchInput) searchInput.addEventListener('input', () => renderFilteredRfidLogs(window.ZGUARD_STATE.rfidLogs));
+    if (statusSelect) statusSelect.addEventListener('change', () => renderFilteredRfidLogs(window.ZGUARD_STATE.rfidLogs));
+    if (resetBtn) {
+        resetBtn.addEventListener('click', () => {
+            if (searchInput) searchInput.value = "";
+            if (statusSelect) statusSelect.value = "ALL";
+            renderFilteredRfidLogs(window.ZGUARD_STATE.rfidLogs);
+        });
+    }
+}
+
+function renderFilteredRfidLogs(logs) {
+    const tableBody = document.getElementById('rfidTableBody');
+    const badge = document.getElementById('rfidLogCountBadge');
+    const searchInput = document.getElementById('filterSearch');
+    const statusSelect = document.getElementById('filterStatus');
+
     if (!tableBody) return;
 
-    if (badge) badge.textContent = `${logs.length} Scans`;
+    let filtered = logs || [];
 
-    if (!logs || logs.length === 0) {
-        tableBody.innerHTML = `<tr><td colspan="4" class="text-center text-muted">Waiting for ESP32 RFID scan data...</td></tr>`;
+    // Filter by Search Query (UID or User Name)
+    if (searchInput && searchInput.value.trim()) {
+        const q = searchInput.value.trim().toLowerCase();
+        filtered = filtered.filter(l => 
+            (l.uid && l.uid.toLowerCase().includes(q)) || 
+            (l.user_name && l.user_name.toLowerCase().includes(q))
+        );
+    }
+
+    // Filter by Status (AUTHORIZED / UNAUTHORIZED)
+    if (statusSelect && statusSelect.value !== "ALL") {
+        filtered = filtered.filter(l => l.status === statusSelect.value);
+    }
+
+    if (badge) badge.textContent = `${filtered.length} Logs`;
+
+    if (filtered.length === 0) {
+        tableBody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">No matching RFID scan logs found.</td></tr>`;
         return;
     }
 
-    tableBody.innerHTML = logs.map(log => {
-        const timeStr = log.timestamp ? new Date(log.timestamp).toLocaleTimeString() : "Just now";
-        const statusClass = log.status === "AUTHORIZED" ? "authorized" : "unauthorized";
+    tableBody.innerHTML = filtered.map(l => {
+        const timeObj = l.timestamp ? new Date(l.timestamp) : new Date();
+        const timeStr = timeObj.toLocaleTimeString();
+        const dateStr = timeObj.toLocaleDateString();
+        const statusClass = l.status === "AUTHORIZED" ? "authorized" : "unauthorized";
+
         return `
             <tr>
-                <td class="font-mono text-cyan">${log.uid || 'N/A'}</td>
-                <td>${log.user_name || 'Unknown Operator'}</td>
-                <td><span class="status-badge-cell ${statusClass}">${log.status}</span></td>
                 <td class="font-mono text-dim">${timeStr}</td>
+                <td class="font-mono text-dim">${dateStr}</td>
+                <td class="font-mono text-cyan">${l.uid || 'N/A'}</td>
+                <td>${l.user_name || 'Operator'}</td>
+                <td><span class="status-badge-cell ${statusClass}">${l.status}</span></td>
+                <td class="font-mono text-dim">${window.ZGUARD_STATE.deviceId}</td>
             </tr>
         `;
     }).join('');
 }
 
-function renderSecurityEvents(events) {
-    const list = document.getElementById('secEventsList');
-    const badge = document.getElementById('secEventCountBadge');
-    if (!list) return;
+/* ==========================================================================
+   5. Fault Detection Renderer
+   ========================================================================== */
+function renderFaultDetection(state) {
+    const overallStatus = document.getElementById('faultOverallStatus');
+    const vStatus = document.getElementById('faultVoltageStatus');
+    const cStatus = document.getElementById('faultCurrentStatus');
+    const rfidBurstStatus = document.getElementById('faultRfidBurstStatus');
+    const offStatus = document.getElementById('faultOfflineStatus');
 
-    if (badge) badge.textContent = `${events.length} Incidents`;
+    const live = state.live;
+    let isFault = false;
 
-    if (!events || events.length === 0) {
-        list.innerHTML = `<div class="empty-event-state text-muted">No security incidents detected. System safe.</div>`;
-        if (window.update3DRiskScore) window.update3DRiskScore(10);
+    // 1. Connection Status Check
+    if (state.connectionStatus === "offline") {
+        if (offStatus) { offStatus.textContent = "ALARM: Device Offline (>10s Stale)"; offStatus.className = "fault-status text-rose"; }
+        isFault = true;
+    } else if (state.connectionStatus === "live") {
+        if (offStatus) { offStatus.textContent = "Normal (Heartbeat Active)"; offStatus.className = "fault-status text-emerald"; }
+    } else {
+        if (offStatus) { offStatus.textContent = "Waiting for Connection"; offStatus.className = "fault-status text-amber"; }
+    }
+
+    // 2. Voltage Check (>245V)
+    if (live && live.voltage) {
+        const v = parseFloat(live.voltage);
+        if (v > 245) {
+            if (vStatus) { vStatus.textContent = `CRITICAL SPIKE: ${v}V (>245V Max)`; vStatus.className = "fault-status text-rose"; }
+            isFault = true;
+        } else {
+            if (vStatus) { vStatus.textContent = `Normal (${v}V Baseline)`; vStatus.className = "fault-status text-emerald"; }
+        }
+    }
+
+    // 3. Current Check (>7.0A)
+    if (live && live.current) {
+        const c = parseFloat(live.current);
+        if (c > 7.0) {
+            if (cStatus) { cStatus.textContent = `OVERLOAD: ${c}A (>7.0A Max)`; cStatus.className = "fault-status text-rose"; }
+            isFault = true;
+        } else {
+            if (cStatus) { cStatus.textContent = `Normal (${c}A Load)`; cStatus.className = "fault-status text-emerald"; }
+        }
+    }
+
+    // 4. RFID Burst Check
+    if (state.unauthorizedToday >= 3) {
+        if (rfidBurstStatus) { rfidBurstStatus.textContent = `WARNING: ${state.unauthorizedToday} Unauthorized Scans Detected`; rfidBurstStatus.className = "fault-status text-amber"; }
+    } else {
+        if (rfidBurstStatus) { rfidBurstStatus.textContent = "Clear (0 Unauthorized Bursts)"; rfidBurstStatus.className = "fault-status text-emerald"; }
+    }
+
+    // Overall Status
+    if (overallStatus) {
+        if (isFault) {
+            overallStatus.textContent = "SYSTEM STATUS: ALARM FAULT ACTIVE";
+            overallStatus.className = "overall-health-status text-rose";
+        } else {
+            overallStatus.textContent = "SYSTEM STATUS: HEALTHY";
+            overallStatus.className = "overall-health-status text-emerald";
+        }
+    }
+}
+
+/* ==========================================================================
+   6. AI Threat Agents & Event Stream Renderer
+   ========================================================================== */
+function renderAiAgents(state) {
+    const secRisk = document.getElementById('aiSecurityRiskScore');
+    const secReason = document.getElementById('aiSecurityReason');
+    const secRec = document.getElementById('aiSecurityRec');
+
+    const pmConf = document.getElementById('aiPmConfidence');
+    const pmSummary = document.getElementById('aiPmSummary');
+
+    const streamBox = document.getElementById('aiTimelineStream');
+
+    const secEvents = state.securityEvents || [];
+    const aiIncidents = state.aiIncidents || [];
+
+    // Security Agent Latest Event
+    if (secEvents.length > 0) {
+        const latestSec = secEvents[0]; // Recent incident
+        if (secRisk) secRisk.textContent = `${latestSec.risk_score || 85} %`;
+        if (secReason) secReason.textContent = latestSec.reason || "Unauthorized access attempts detected.";
+        if (secRec) secRec.textContent = latestSec.recommendation || "Lock down hardware relay output.";
+    } else {
+        if (secRisk) secRisk.textContent = "0 %";
+        if (secReason) secReason.textContent = "No unauthorized access bursts detected.";
+        if (secRec) secRec.textContent = "Zero Trust security status nominal.";
+    }
+
+    // Combine all events into AI Event Stream
+    const allEvents = [...secEvents, ...aiIncidents].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+    if (!streamBox) return;
+
+    if (allEvents.length === 0) {
+        streamBox.innerHTML = `<div class="text-muted text-center">No security incidents or AI events logged yet.</div>`;
         return;
     }
 
-    let highestRisk = 0;
-    list.innerHTML = events.map(ev => {
-        if (ev.risk_score > highestRisk) highestRisk = ev.risk_score;
-        const timeStr = ev.timestamp ? new Date(ev.timestamp).toLocaleTimeString() : "Just now";
-        const severityClass = ev.severity === "critical" ? "critical" : "warning";
-        const colorClass = ev.severity === "critical" ? "text-rose" : "text-amber";
+    streamBox.innerHTML = allEvents.map(ev => {
+        const timeStr = ev.timestamp ? new Date(ev.timestamp).toLocaleTimeString() : 'Just now';
+        const type = ev.type || ev.agent || 'AI Event';
+        const isCritical = ev.severity === "critical";
+        const colorClass = isCritical ? "text-rose" : "text-cyan";
 
         return `
-            <div class="sec-event-item ${severityClass}">
+            <div class="agent-output-box">
                 <div class="event-top-row">
-                    <span class="event-type-tag ${colorClass}">${ev.type || 'security_incident'}</span>
-                    <span class="event-time">${timeStr}</span>
+                    <span class="agent-out-lbl ${colorClass}">${type}</span>
+                    <span class="font-mono text-dim">${timeStr}</span>
                 </div>
-                <div class="event-reason">${ev.reason}</div>
-                <div class="event-rec">⚡ Rec: ${ev.recommendation}</div>
+                <p class="agent-out-text">${ev.reason || (ev.payload ? JSON.stringify(ev.payload) : 'AI Analysis Event')}</p>
             </div>
         `;
     }).join('');
-
-    // Update 3D Ring Color based on highest risk
-    if (window.update3DRiskScore) {
-        window.update3DRiskScore(highestRisk);
-    }
 }
 
-/* ==========================================================================
-   2. Canvas Particle Mesh Background
-   ========================================================================== */
-function initCanvasMesh() {
-    const canvas = document.getElementById('bgCanvas');
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-
-    let width, height;
-    let particles = [];
-
-    function resize() {
-        width = canvas.width = window.innerWidth;
-        height = canvas.height = window.innerHeight;
-    }
-    window.addEventListener('resize', resize);
-    resize();
-
-    class Particle {
-        constructor() {
-            this.x = Math.random() * width;
-            this.y = Math.random() * height;
-            this.vx = (Math.random() - 0.5) * 0.4;
-            this.vy = (Math.random() - 0.5) * 0.4;
-            this.radius = Math.random() * 2 + 1;
-        }
-
-        update() {
-            this.x += this.vx;
-            this.y += this.vy;
-            if (this.x < 0 || this.x > width) this.vx *= -1;
-            if (this.y < 0 || this.y > height) this.vy *= -1;
-        }
-
-        draw() {
-            ctx.beginPath();
-            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-            ctx.fillStyle = '#06b6d4';
-            ctx.fill();
-        }
-    }
-
-    const count = Math.min(Math.floor(window.innerWidth / 20), 45);
-    for (let i = 0; i < count; i++) particles.push(new Particle());
-
-    function animate() {
-        ctx.clearRect(0, 0, width, height);
-        for (let i = 0; i < particles.length; i++) {
-            particles[i].update();
-            particles[i].draw();
-
-            for (let j = i + 1; j < particles.length; j++) {
-                const dx = particles[i].x - particles[j].x;
-                const dy = particles[i].y - particles[j].y;
-                const dist = Math.sqrt(dx * dx + dy * dy);
-
-                if (dist < 140) {
-                    ctx.beginPath();
-                    ctx.moveTo(particles[i].x, particles[i].y);
-                    ctx.lineTo(particles[j].x, particles[j].y);
-                    ctx.strokeStyle = `rgba(6, 182, 212, ${0.18 * (1 - dist / 140)})`;
-                    ctx.lineWidth = 0.8;
-                    ctx.stroke();
-                }
-            }
-        }
-        requestAnimationFrame(animate);
-    }
-    animate();
-}
-
-/* ==========================================================================
-   3. 5-Phase Roadmap Stepper Engine
-   ========================================================================== */
-const ROADMAP_PHASES = {
-    1: {
-        title: "Discovery & Asset Inventory",
-        weeks: "Weeks 1–2",
-        tag: "PHASE 01: ASSESSMENT",
-        desc: "Passive network discovery across all IoT/IIoT & OT device classes without introducing latency or network disruption.",
-        checklist: [
-            "Passive DPI & SPAN/TAP mirror port scanning for all IoT/OT devices",
-            "Asset classification by criticality, vendor, protocol (Modbus, BACnet, MQTT), and legacy OS status",
-            "Risk & gap assessment comparing current posture against NIST 800-207 and IEC 62443",
-            "Shadow IT & unauthorized rogue device detection"
-        ],
-        deliverable: "Comprehensive Device Inventory Report & Asset Vulnerability Risk Heatmap"
-    },
-    2: {
-        title: "Architecture Design & Policy Baseline",
-        weeks: "Weeks 3–4",
-        tag: "PHASE 02: DESIGN",
-        desc: "Define granular micro-segmentation protect surfaces, establish zero-trust identity policies, and sign off architectural blueprints.",
-        checklist: [
-            "Identify Protect Surfaces (data flows, sensitive PLCs, medical telemetry lines)",
-            "Determine Agent vs Agentless enforcement policy per hardware device class",
-            "Draft micro-segmentation zones & zero trust network access (ZTNA) rules",
-            "Establish PKI certificate lifecycle & identity management mapping"
-        ],
-        deliverable: "ZGuard ZT Architecture Blueprint (Formally signed off by CISO & OT Security Lead)"
-    },
-    3: {
-        title: "Pilot Deployment & Observe Mode",
-        weeks: "Weeks 5–8",
-        tag: "PHASE 03: PILOT TEST",
-        desc: "Deploy ZGuard on a controlled pilot site (single manufacturing line or hospital wing) running exclusively in Observe Mode to validate baseline traffic.",
-        checklist: [
-            "Deploy ZGuard Edge Proxies on pilot segment with fail-open bypass protection",
-            "Issue PKI device identities & initiate continuous telemetry monitoring",
-            "Observe mode active: anomaly detection models learn baseline without dropping valid traffic",
-            "Validate policy rules against actual operational workflows with zero false positives"
-        ],
-        deliverable: "Pilot Execution Report & Baseline Success Metrics Matrix vs Initial Posture"
-    },
-    4: {
-        title: "Phased Production Rollout",
-        weeks: "Weeks 9–20",
-        tag: "PHASE 04: ROLLOUT",
-        desc: "Incremental transition from Observe to Enforce mode site-by-site or by device tier, integrating into enterprise SIEM/SOAR and IAM portals.",
-        checklist: [
-            "Incremental migration from Observe → Enforce mode by site micro-zone",
-            "Roll out transparent ZGuard Edge Gateways for legacy unmanaged hardware",
-            "Integrate continuous event telemetry with Splunk, Microsoft Sentinel, and ServiceNow",
-            "Activate Just-In-Time (JIT) ephemeral vendor access policies"
-        ],
-        deliverable: "Site-by-Site Go-Live Formal Sign-Offs & SIEM/SOAR Integration Validation"
-    },
-    5: {
-        title: "Steady-State Operations & Optimization",
-        weeks: "Week 20+ Ongoing",
-        tag: "PHASE 05: STEADY-STATE",
-        desc: "Automated 24/7 incident response, quarterly access recertification, continuous security posture tuning, and executive governance reviews.",
-        checklist: [
-            "24/7 continuous behavioral anomaly monitoring & automated threat containment",
-            "Quarterly zero-trust policy reviews and access recertification audits",
-            "OTA update governance & firmware patch integrity verification",
-            "Quarterly Executive Business Reviews (QBR) tracking security KPIs"
-        ],
-        deliverable: "Quarterly Business Review (QBR) Report with Executive KPI Benchmarks"
-    }
-};
-
-function initPhasedStepper() {
-    const navItems = document.querySelectorAll('.step-nav-item');
-    const detailCard = document.getElementById('stepDetailCard');
-
-    function renderStep(stepId) {
-        const data = ROADMAP_PHASES[stepId];
-        if (!data || !detailCard) return;
-
-        navItems.forEach(item => {
-            if (parseInt(item.dataset.step) === stepId) item.classList.add('active');
-            else item.classList.remove('active');
-        });
-
-        detailCard.innerHTML = `
-            <div class="detail-header">
-                <div class="detail-title-group">
-                    <span class="detail-phase-badge">Phase 0${stepId}</span>
-                    <h3 class="detail-phase-title">${data.title}</h3>
-                </div>
-                <span class="detail-week-badge">${data.weeks}</span>
-            </div>
-
-            <div class="detail-grid">
-                <div>
-                    <p class="detail-desc">${data.desc}</p>
-                    <h4 class="detail-list-title">Key Phase Execution Steps</h4>
-                    <ul class="checklist">
-                        ${data.checklist.map(item => `
-                            <li class="checklist-item">
-                                <span class="check-icon">
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
-                                </span>
-                                <span>${item}</span>
-                            </li>
-                        `).join('')}
-                    </ul>
-                </div>
-
-                <div>
-                    <div class="deliverable-box">
-                        <span class="deliverable-tag">${data.tag} DELIVERABLE</span>
-                        <div class="deliverable-name">${data.deliverable}</div>
-                        <p class="deliverable-desc">Audited enterprise consulting deliverable presented directly to customer security steering committee.</p>
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-
-    navItems.forEach(item => {
-        item.addEventListener('click', () => renderStep(parseInt(item.dataset.step)));
-    });
-
-    renderStep(1);
-}
-
-/* ==========================================================================
-   4. Interactive Gantt Timeline
-   ========================================================================== */
-const GANTT_PROFILES = {
-    small: {
-        totalWeeks: 12,
-        heroWeeks: "12 Weeks",
-        phases: [
-            { id: 1, name: "Phase 1: Discovery", start: 1, span: 2, class: "phase-1" },
-            { id: 2, name: "Phase 2: Design", start: 2, span: 2, class: "phase-2" },
-            { id: 3, name: "Phase 3: Pilot", start: 4, span: 2, class: "phase-3" },
-            { id: 4, name: "Phase 4: Production Rollout", start: 6, span: 5, class: "phase-4" },
-            { id: 5, name: "Phase 5: Steady-State Ops", start: 11, span: 2, class: "phase-5" }
-        ]
-    },
-    enterprise: {
-        totalWeeks: 20,
-        heroWeeks: "20 Weeks",
-        phases: [
-            { id: 1, name: "Phase 1: Discovery & Inventory", start: 1, span: 2, class: "phase-1" },
-            { id: 2, name: "Phase 2: Architecture Baseline", start: 3, span: 2, class: "phase-2" },
-            { id: 3, name: "Phase 3: Pilot Deployment", start: 5, span: 4, class: "phase-3" },
-            { id: 4, name: "Phase 4: Production Rollout", start: 9, span: 12, class: "phase-4" },
-            { id: 5, name: "Phase 5: Steady-State Ops", start: 19, span: 2, class: "phase-5" }
-        ]
-    }
-};
-
-function initGanttTimeline() {
-    const btnSmall = document.getElementById('btnSmallScale');
-    const btnEnterprise = document.getElementById('btnEnterpriseScale');
-    const weeksHeader = document.getElementById('ganttWeeksHeader');
-    const ganttBody = document.getElementById('ganttBody');
-
-    function renderGantt(profileKey) {
-        const profile = GANTT_PROFILES[profileKey];
-        if (!weeksHeader || !ganttBody) return;
-
-        let headerCols = `<div class="week-col-head">Phase / Milestone</div>`;
-        for (let w = 1; w <= profile.totalWeeks; w++) {
-            headerCols += `<div class="week-col-head">W${w}</div>`;
-        }
-        weeksHeader.style.gridTemplateColumns = `220px repeat(${profile.totalWeeks}, 1fr)`;
-        weeksHeader.innerHTML = headerCols;
-
-        let bodyHtml = '';
-        profile.phases.forEach(p => {
-            bodyHtml += `
-                <div class="gantt-row" style="grid-template-columns: 220px repeat(${profile.totalWeeks}, 1fr);">
-                    <div class="gantt-label">${p.name}</div>
-                    <div class="gantt-bar-container" style="grid-template-columns: repeat(${profile.totalWeeks}, 1fr);">
-                        <div class="gantt-bar ${p.class}" style="grid-column: ${p.start} / span ${p.span};">
-                            W${p.start} - W${p.start + p.span - 1} (${p.span} wks)
-                        </div>
-                    </div>
-                </div>
-            `;
-        });
-        ganttBody.innerHTML = bodyHtml;
-    }
-
-    if (btnSmall && btnEnterprise) {
-        btnSmall.addEventListener('click', () => {
-            btnSmall.classList.add('active');
-            btnEnterprise.classList.remove('active');
-            renderGantt('small');
-        });
-
-        btnEnterprise.addEventListener('click', () => {
-            btnEnterprise.classList.add('active');
-            btnSmall.classList.remove('active');
-            renderGantt('enterprise');
-        });
-    }
-
-    renderGantt('enterprise');
-}
-
-/* ==========================================================================
-   5. Metrics Counter & Risk Simulator
-   ========================================================================== */
-function initMetricsCounter() {
-    const metricCards = document.querySelectorAll('.metric-number[data-target]');
-    const observer = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-            if (entry.isIntersecting) {
-                const target = parseInt(entry.target.dataset.target);
-                animateCounter(entry.target, target);
-                observer.unobserve(entry.target);
-            }
-        });
-    }, { threshold: 0.5 });
-    metricCards.forEach(card => observer.observe(card));
-}
-
-function animateCounter(element, target) {
-    let current = 0;
-    const increment = target / 40;
-    const timer = setInterval(() => {
-        current += increment;
-        if (current >= target) {
-            element.textContent = target + '%';
-            clearInterval(timer);
-        } else {
-            element.textContent = Math.floor(current) + '%';
-        }
-    }, 25);
-}
-
-function initRiskSimulator() {
-    const slider = document.getElementById('simWeekSlider');
-    const simWeekVal = document.getElementById('simWeekVal');
-    const simRiskBar = document.getElementById('simRiskBar');
-    const simRiskVal = document.getElementById('simRiskVal');
-    const simPolicyVal = document.getElementById('simPolicyVal');
-
-    if (!slider) return;
-
-    slider.addEventListener('input', (e) => {
-        const week = parseInt(e.target.value);
-        simWeekVal.textContent = `Week ${week}`;
-
-        const riskScore = Math.max(5, Math.round(95 - (week - 1) * 4.7));
-        const policyPct = Math.min(100, Math.round((week / 20) * 100));
-
-        simRiskBar.style.width = `${riskScore}%`;
-        if (riskScore > 60) {
-            simRiskBar.style.background = 'var(--rose-500)';
-            simRiskVal.textContent = `${riskScore} / 100 (High Risk)`;
-        } else if (riskScore > 25) {
-            simRiskBar.style.background = 'var(--amber-500)';
-            simRiskVal.textContent = `${riskScore} / 100 (Moderate Risk)`;
-        } else {
-            simRiskBar.style.background = 'var(--emerald-400)';
-            simRiskVal.textContent = `${riskScore} / 100 (Low Risk / Zero Trust Enforced)`;
-        }
-
-        simPolicyVal.textContent = `${policyPct}% Enforced Mode`;
-    });
-}
-
-/* ==========================================================================
-   6. Deployment Model Options Tabs
-   ========================================================================== */
-const DEPLOYMENT_MODELS = {
-    onprem: {
-        title: "On-Premises Air-Gapped Engine",
-        desc: "Designed for classified defense facilities, power generation plants, and air-gapped industrial OT networks requiring zero external cloud connectivity.",
-        pros: ["100% Data Sovereignty & Local Storage", "Air-gapped deployment compatibility", "Zero external outbound network dependencies"],
-        cons: ["Requires local server appliance cluster", "Manual OTA offline update bundle management"],
-        specs: { latency: "< 1ms Ultra-low", management: "Local Appliance Console", compliance: "IEC 62443 SL-4 / NERC-CIP" }
-    },
-    cloud: {
-        title: "Cloud-Hosted Managed SaaS",
-        desc: "Ideal for distributed commercial enterprises, multi-site logistics centers, and retail IoT deployments wanting instant updates and low operational overhead.",
-        pros: ["Instant provisioning & zero local server management", "Automated threat intelligence feed updates", "Global multi-site dashboard aggregation"],
-        cons: ["Requires secure outbound TLS 1.3 telemetry tunnel", "Cloud compliance alignment required"],
-        specs: { latency: "< 15ms Regional", management: "ZGuard Cloud SOC Portal", compliance: "SOC 2 Type II / ISO 27001" }
-    },
-    hybrid: {
-        title: "Hybrid Cloud Engine (Most Popular)",
-        desc: "Combines local edge enforcement proxies with cloud analytics for central policy governance and localized real-time threat containment.",
-        pros: ["Local enforcement continues even during WAN outages", "Centralized policy management across global sites", "Optimized bandwidth utilization"],
-        cons: ["Hybrid network routing architecture setup"],
-        specs: { latency: "< 2ms Local Edge", management: "Unified Hybrid Dashboard", compliance: "NIS 2 / GDPR / HIPAA" }
-    },
-    edge: {
-        title: "Edge-Native OT Gateway",
-        desc: "Lightweight proxy micro-kernel deployed directly on industrial gateways, DIN-rail switches, or medical telemetry bridges for real-time SCADA lines.",
-        pros: ["Sub-millisecond packet inspection for Modbus/SCADA", "Fail-open hardware bypass relays", "Zero footprint on legacy OT controllers"],
-        cons: ["Requires compatible DIN-rail edge hardware"],
-        specs: { latency: "< 0.5ms Micro-Second", management: "ZGuard Edge Agent Manager", compliance: "IEC 62443-4-2" }
-    }
-};
-
-function initDeploymentTabs() {
-    const tabBtns = document.querySelectorAll('.tab-btn');
-    const contentBox = document.getElementById('deploymentContent');
-
-    function renderTab(tabId) {
-        const model = DEPLOYMENT_MODELS[tabId];
-        if (!model || !contentBox) return;
-
-        tabBtns.forEach(btn => {
-            if (btn.dataset.tab === tabId) btn.classList.add('active');
-            else btn.classList.remove('active');
-        });
-
-        contentBox.innerHTML = `
-            <div class="tab-card">
-                <div>
-                    <h3 class="tab-title">${model.title}</h3>
-                    <p class="tab-desc">${model.desc}</p>
-                    <div class="pro-con-grid">
-                        <div class="pro-box">
-                            <h4>Architectural Advantages</h4>
-                            <ul class="pro-con-list">
-                                ${model.pros.map(p => `<li>✓ ${p}</li>`).join('')}
-                            </ul>
-                        </div>
-                        <div class="con-box">
-                            <h4>Considerations</h4>
-                            <ul class="pro-con-list">
-                                ${model.cons.map(c => `<li>• ${c}</li>`).join('')}
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="specs-box">
-                    <div class="spec-item"><span class="spec-label">Inspection Latency</span><span class="spec-val">${model.specs.latency}</span></div>
-                    <div class="spec-item"><span class="spec-label">Management Layer</span><span class="spec-val">${model.specs.management}</span></div>
-                    <div class="spec-item"><span class="spec-label">Target Compliance Standard</span><span class="spec-val">${model.specs.compliance}</span></div>
-                </div>
-            </div>
-        `;
-    }
-
-    tabBtns.forEach(btn => {
-        btn.addEventListener('click', () => renderTab(btn.dataset.tab));
-    });
-
-    renderTab('onprem');
-}
-
-/* ==========================================================================
-   7. Lead Capture & Timeline Estimator Calculator
-   ========================================================================== */
-function initCalculatorForm() {
-    const form = document.getElementById('calculatorForm');
-    const slider = document.getElementById('deviceCount');
-    const sliderVal = document.getElementById('deviceCountVal');
-    const calcEstWeeks = document.getElementById('calcEstWeeks');
-    const calcEstMode = document.getElementById('calcEstMode');
-    const calcEstEngineers = document.getElementById('calcEstEngineers');
-
-    const modal = document.getElementById('successModal');
-    const modalCloseBtn = document.getElementById('modalCloseBtn');
-    const modalOkBtn = document.getElementById('modalOkBtn');
-
-    if (!form || !slider) return;
-
-    function updateEstimates() {
-        const count = parseInt(slider.value);
-        if (sliderVal) sliderVal.textContent = `${count.toLocaleString()} Devices`;
-
-        let weeks = 12, mode = "Hybrid Edge Gateway", engineers = "2 Engineers";
-        if (count > 20000) { weeks = 24; mode = "Distributed Enterprise Edge"; engineers = "5 Engineers + Architect"; }
-        else if (count > 8000) { weeks = 20; mode = "Hybrid Multi-Site Cloud"; engineers = "3 Engineers"; }
-        else if (count > 2500) { weeks = 16; mode = "Hybrid Edge Gateway"; engineers = "2 Engineers"; }
-        else { weeks = 12; mode = "Cloud SaaS / Edge Proxy"; engineers = "1 Dedicated Engineer"; }
-
-        if (calcEstWeeks) calcEstWeeks.textContent = `${weeks} Weeks`;
-        if (calcEstMode) calcEstMode.textContent = mode;
-        if (calcEstEngineers) calcEstEngineers.textContent = engineers;
-    }
-
-    slider.addEventListener('input', updateEstimates);
-    updateEstimates();
-
-    form.addEventListener('submit', (e) => {
-        e.preventDefault();
-        let isValid = true;
-        const companyName = document.getElementById('companyName');
-        const workEmail = document.getElementById('workEmail');
-        const industryVertical = document.getElementById('industryVertical');
-
-        const companyGroup = companyName.closest('.form-group');
-        const emailGroup = workEmail.closest('.form-group');
-        const industryGroup = industryVertical.closest('.form-group');
-
-        [companyGroup, emailGroup, industryGroup].forEach(g => g.classList.remove('error'));
-
-        if (!companyName.value.trim()) { companyGroup.classList.add('error'); isValid = false; }
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(workEmail.value.trim())) { emailGroup.classList.add('error'); isValid = false; }
-        if (!industryVertical.value) { industryGroup.classList.add('error'); isValid = false; }
-
-        if (isValid) {
-            document.getElementById('modalCompName').textContent = companyName.value;
-            document.getElementById('modalDeviceCount').textContent = `${parseInt(slider.value).toLocaleString()} Devices`;
-            document.getElementById('modalTimelineWeeks').textContent = calcEstWeeks.textContent;
-            document.getElementById('modalDeploymentModel').textContent = calcEstMode.textContent;
-
-            modal.classList.add('active');
-            form.reset();
-            updateEstimates();
-        }
-    });
-
-    const closeModal = () => modal.classList.remove('active');
-    if (modalCloseBtn) modalCloseBtn.addEventListener('click', closeModal);
-    if (modalOkBtn) modalOkBtn.addEventListener('click', closeModal);
-}
-
-/* ==========================================================================
-   8. Mobile Navigation Toggle
-   ========================================================================== */
+/* Mobile Nav Drawer */
 function initMobileNav() {
-    const menuBtn = document.getElementById('mobileMenuBtn');
-    const navLinks = document.getElementById('navLinks');
-
-    if (menuBtn && navLinks) {
-        menuBtn.addEventListener('click', () => navLinks.classList.toggle('active'));
+    const btn = document.getElementById('mobileMenuBtn');
+    const nav = document.getElementById('mainTabNav');
+    if (btn && nav) {
+        btn.addEventListener('click', () => nav.classList.toggle('active'));
     }
 }

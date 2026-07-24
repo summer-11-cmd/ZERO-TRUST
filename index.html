@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ZGuard | Zero Trust IoT Platform & 3D Realtime Security Dashboard</title>
-    <meta name="description" content="Zero Trust security platform for IoT/IIoT environments with real-time Firebase RTDB integration, ESP32 edge control, 3D device twin, and AI threat response.">
+    <title>ZGuard | Single-Device Industrial IoT Security Monitor</title>
+    <meta name="description" content="Single-device industrial IoT security monitoring dashboard with real-time Firebase RTDB integration, ESP32 hardware control, 3D device twin, and AI threat response.">
     
     <!-- Google Fonts: Inter & JetBrains Mono -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -29,30 +29,30 @@
         <div class="container header-inner">
             <a href="#" class="brand-logo">
                 <div class="logo-icon">
-                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
                         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
                         <path d="m9 12 2 2 4-4"></path>
                     </svg>
                 </div>
                 <div class="logo-text">
                     <span class="brand-name">ZGUARD</span>
-                    <span class="brand-tag">ZERO TRUST IoT</span>
+                    <span class="brand-tag">INDUSTRIAL IoT SECURITY</span>
                 </div>
             </a>
 
-            <nav class="nav-links" id="navLinks">
-                <a href="#live-dashboard">Live 3D Dashboard</a>
-                <a href="#roadmap">Phased Roadmap</a>
-                <a href="#gantt">Gantt Timeline</a>
-                <a href="#resources">Team & Effort</a>
-                <a href="#metrics">Success KPIs</a>
-                <a href="#deployment">Deployment Models</a>
-                <a href="#risk">Risk Mitigation</a>
+            <nav class="nav-links" id="mainTabNav">
+                <button class="nav-tab-btn active" data-tab="tab-overview">Overview</button>
+                <button class="nav-tab-btn" data-tab="tab-device">Device Setup & Control</button>
+                <button class="nav-tab-btn" data-tab="tab-rfid">RFID Access Log</button>
+                <button class="nav-tab-btn" data-tab="tab-faults">Fault Detection</button>
+                <button class="nav-tab-btn" data-tab="tab-ai">AI Threat Agents</button>
             </nav>
 
             <div class="header-actions">
-                <a href="#lead-form" class="btn btn-outline">Timeline Calculator</a>
-                <a href="#lead-form" class="btn btn-primary">Talk to an Architect</a>
+                <div class="badge-pill" id="globalStatusPill">
+                    <span class="pulse-dot" id="statusPulseDot"></span> 
+                    <span id="connectionStatusText">Waiting for ESP32-01 connection...</span>
+                </div>
                 <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle Navigation">
                     <span></span><span></span><span></span>
                 </button>
@@ -60,75 +60,92 @@
         </div>
     </header>
 
-    <main>
-        <!-- Hero Section & 3D Device Twin Panel -->
-        <section class="hero-section" id="live-dashboard">
-            <div class="container hero-grid">
-                <div class="hero-content">
-                    <div class="badge-pill" id="globalStatusPill">
-                        <span class="pulse-dot" id="statusPulseDot"></span> 
-                        <span id="connectionStatusText">Waiting for ESP32-01 connection...</span>
-                    </div>
-                    <h1 class="hero-title">
-                        Real-Time Zero Trust IoT Security Engine
-                    </h1>
-                    <p class="hero-subtitle">
-                        Direct Firebase RTDB telemetry integration with <strong>ESP32 Edge Gateways</strong>, 3D Digital Twin node monitoring, zero-trust RFID verification, and autonomous AI threat containment.
-                    </p>
+    <main class="container main-content">
 
-                    <div class="hero-ctas">
-                        <button class="btn btn-primary btn-lg" id="btnCutRelay">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
-                            <span id="cutRelayBtnText">Emergency Relay Cut</span>
-                        </button>
-                        <a href="#roadmap" class="btn btn-glass btn-lg">
-                            <span>Explore 5-Phase Roadmap</span>
-                        </a>
-                    </div>
+        <!-- TAB 1: SYSTEM OVERVIEW & 3D DEVICE TWIN -->
+        <section class="tab-pane active" id="tab-overview">
+            <div class="overview-header-row">
+                <h1 class="page-title">System Status & Digital Twin</h1>
+                <span class="device-target-tag">Target Device: <strong id="targetDeviceTag">ESP32-01</strong></span>
+            </div>
 
-                    <div class="compliance-row">
-                        <span class="compliance-label">Compliant with Enterprise Standards:</span>
-                        <div class="compliance-badges">
-                            <span class="comp-badge" title="International Standard for Industrial Automation Security">IEC 62443</span>
-                            <span class="comp-badge" title="EU NIS 2 Directive Cybersecurity Standard">NIS 2 Ready</span>
-                            <span class="comp-badge" title="SOC 2 Type II Certified Security Controls">SOC 2 Type II</span>
-                            <span class="comp-badge" title="ISO/IEC 27001 Information Security">ISO 27001</span>
-                            <span class="comp-badge" title="NIST SP 800-207 Zero Trust Architecture">NIST 800-207</span>
-                        </div>
+            <!-- Live Computed Overview Metrics Grid -->
+            <div class="overview-metrics-grid">
+                <div class="metric-card highlight-card">
+                    <div class="metric-icon green">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                    </div>
+                    <div>
+                        <div class="metric-number" id="overviewHealthScore">-- %</div>
+                        <div class="metric-title">Overall System Health</div>
+                        <p class="metric-desc">Computed live from telemetry stability & risk scores</p>
                     </div>
                 </div>
 
-                <!-- 3D Device Twin Hero Panel -->
-                <div class="hero-visual-card">
-                    <div class="visual-header">
-                        <div class="window-dots"><span></span><span></span><span></span></div>
-                        <div class="visual-title">ZGuard 3D Device Twin — Node ESP32-01</div>
-                        <div class="visual-status" id="twinStatusHeader">
-                            <span class="status-indicator" id="twinStatusDot"></span> 
-                            <span id="twinStatusLabel">WAITING FOR CONNECTION</span>
-                        </div>
+                <div class="metric-card">
+                    <div class="metric-icon blue">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/></svg>
                     </div>
-                    
-                    <div class="visual-body">
-                        <!-- 3D Canvas Mounting Container -->
-                        <div id="deviceTwinContainer" class="twin-3d-box"></div>
+                    <div class="metric-number" id="overviewOnlineDevices">0 / 1</div>
+                    <div class="metric-title">Online Device Status</div>
+                    <p class="metric-desc">Single physical ESP32 gateway</p>
+                </div>
 
-                        <!-- Realtime Telemetry Stats Grid -->
-                        <div class="metric-mini-grid">
-                            <div class="mini-card">
-                                <span class="mini-label">Voltage / Current</span>
-                                <span class="mini-value text-cyan" id="liveVolts">-- V</span>
-                                <span class="mini-sub" id="liveAmps">-- A</span>
+                <div class="metric-card">
+                    <div class="metric-icon cyan">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    </div>
+                    <div class="metric-number" id="overviewTrustedDevices">1</div>
+                    <div class="metric-title">Trusted Hardware Nodes</div>
+                    <p class="metric-desc">Zero Trust Edge Whitelist Enabled</p>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-icon rose">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    </div>
+                    <div class="metric-number text-rose" id="overviewUnauthCount">0</div>
+                    <div class="metric-title">Unauthorized Scans Today</div>
+                    <p class="metric-desc">Real-time audit log count</p>
+                </div>
+            </div>
+
+            <!-- 3D Digital Twin Panel -->
+            <div class="twin-panel-card">
+                <div class="card-header-bar">
+                    <h3><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg> 3D Device Twin — Node ESP32-01</h3>
+                    <span class="card-status-badge" id="twinRiskBadge">ZERO TRUST RISK: SAFE</span>
+                </div>
+                <div class="twin-body-grid">
+                    <!-- 3D Canvas Mounting Area -->
+                    <div id="deviceTwinContainer" class="twin-3d-box"></div>
+
+                    <div class="twin-info-sidebar">
+                        <h4>Hardware Node Telemetry</h4>
+                        <div class="info-list">
+                            <div class="info-item">
+                                <span class="info-label">Node Identifier</span>
+                                <strong class="info-val font-mono text-cyan" id="twinDevId">ESP32-01</strong>
                             </div>
-                            <div class="mini-card">
-                                <span class="mini-label">Relay / Motor</span>
-                                <span class="mini-value text-emerald" id="liveRelayStatus">--</span>
-                                <span class="mini-sub" id="liveMotorStatus">--</span>
+                            <div class="info-item">
+                                <span class="info-label">AC Line Voltage</span>
+                                <strong class="info-val font-mono" id="twinVolts">-- V</strong>
                             </div>
-                            <div class="mini-card">
-                                <span class="mini-label">Last RFID Scan</span>
-                                <span class="mini-value text-indigo" id="liveRfidUid">--</span>
-                                <span class="mini-sub" id="liveRfidStatus">--</span>
+                            <div class="info-item">
+                                <span class="info-label">Load Current</span>
+                                <strong class="info-val font-mono" id="twinCurrent">-- A</strong>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">Industrial Relay</span>
+                                <strong class="info-val" id="twinRelay">--</strong>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">Motor Contactor</span>
+                                <strong class="info-val" id="twinMotor">--</strong>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">Last Communication</span>
+                                <strong class="info-val font-mono text-dim" id="twinLastSeen">--</strong>
                             </div>
                         </div>
                     </div>
@@ -136,619 +153,269 @@
             </div>
         </section>
 
-        <!-- Live Real-Time Logs Section -->
-        <section class="section rtdb-logs-section">
-            <div class="container">
-                <div class="section-header">
-                    <span class="section-tag">FIREBASE LIVE DATA STREAM</span>
-                    <h2 class="section-title">Security Events & RFID Audit Logs</h2>
-                    <p class="section-subtitle">Real-time telemetry and access audit logs direct from `/devices/ESP32-01/rfid_log` and `/security_events`.</p>
-                </div>
+        <!-- TAB 2: DEVICE SETUP & PERSISTENT MONITORING -->
+        <section class="tab-pane" id="tab-device">
+            <div class="overview-header-row">
+                <h1 class="page-title">Device Setup & Live Control</h1>
+            </div>
 
-                <div class="logs-grid">
-                    <!-- RFID Scan Logs Table -->
-                    <div class="log-card">
-                        <div class="log-card-header">
-                            <h3><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> RFID Scan Telemetry Stream</h3>
-                            <span class="log-count" id="rfidCountBadge">0 Scans</span>
-                        </div>
-                        <div class="table-responsive">
-                            <table class="resources-table">
-                                <thead>
-                                    <tr>
-                                        <th>UID</th>
-                                        <th>User Name</th>
-                                        <th>Status</th>
-                                        <th>Timestamp</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="rfidLogTableBody">
-                                    <tr><td colspan="4" class="text-center text-muted">Waiting for ESP32 RFID scan data...</td></tr>
-                                </tbody>
-                            </table>
-                        </div>
+            <div class="device-grid">
+                <!-- Single Add/Configure Device Slot Card -->
+                <div class="card-panel">
+                    <div class="card-header-bar">
+                        <h3><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1222s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Firebase Device Connection Setup</h3>
                     </div>
 
-                    <!-- Security AI Incident Events -->
-                    <div class="log-card">
-                        <div class="log-card-header">
-                            <h3><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 2v7.527a2 2 0 0 1-.211.896L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.069-10.127A2 2 0 0 1 14 9.527V2"/><line x1="8.5" y1="2" x2="15.5" y2="2"/></svg> AI Threat Events</h3>
-                            <span class="log-count" id="secEventCountBadge">0 Incidents</span>
-                        </div>
-                        <div class="sec-events-list" id="secEventsList">
-                            <div class="empty-event-state text-muted">No security incidents detected. System safe.</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
+                    <p class="panel-desc">Configure your Firebase Realtime Database credentials to connect ZGuard directly to your physical ESP32 gateway.</p>
 
-        <!-- Roadmap Overview (5-Phase Stepper Visual) -->
-        <section class="section roadmap-section" id="roadmap">
-            <div class="container">
-                <div class="section-header center">
-                    <span class="section-tag">STRUCTURED DEPLOYMENT</span>
-                    <h2 class="section-title">5-Phase Implementation Roadmap</h2>
-                    <p class="section-subtitle">Every phase delivers clear security milestones, risk heatmaps, and formal sign-offs before moving to the next stage.</p>
-                </div>
+                    <form id="setupForm" class="setup-form" novalidate>
+                        <div class="form-group">
+                            <label for="cfgApiKey">Firebase API Key *</label>
+                            <input type="text" id="cfgApiKey" required placeholder="AIzaSy...">
+                        </div>
 
-                <!-- Horizontal Stepper Header (Desktop & Tablet) -->
-                <div class="stepper-nav" id="stepperNav">
-                    <button class="step-nav-item active" data-step="1">
-                        <div class="step-num">01</div>
-                        <div class="step-icon">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        <div class="form-group">
+                            <label for="cfgDbUrl">Database URL *</label>
+                            <input type="text" id="cfgDbUrl" required placeholder="https://your-app-default-rtdb.firebaseio.com">
                         </div>
-                        <div class="step-info">
-                            <span class="step-name">Discovery & Asset Inventory</span>
-                            <span class="step-time">Weeks 1–2</span>
-                        </div>
-                    </button>
 
-                    <button class="step-nav-item" data-step="2">
-                        <div class="step-num">02</div>
-                        <div class="step-icon">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
-                        </div>
-                        <div class="step-info">
-                            <span class="step-name">Architecture & Policy</span>
-                            <span class="step-time">Weeks 3–4</span>
-                        </div>
-                    </button>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="cfgProjectId">Project ID *</label>
+                                <input type="text" id="cfgProjectId" required placeholder="zguard-iot">
+                            </div>
 
-                    <button class="step-nav-item" data-step="3">
-                        <div class="step-num">03</div>
-                        <div class="step-icon">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 2v7.527a2 2 0 0 1-.211.896L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.069-10.127A2 2 0 0 1 14 9.527V2"/><line x1="8.5" y1="2" x2="15.5" y2="2"/></svg>
+                            <div class="form-group">
+                                <label for="cfgDeviceId">Device ID *</label>
+                                <input type="text" id="cfgDeviceId" required value="ESP32-01">
+                            </div>
                         </div>
-                        <div class="step-info">
-                            <span class="step-name">Pilot Deployment</span>
-                            <span class="step-time">Weeks 5–8</span>
-                        </div>
-                    </button>
 
-                    <button class="step-nav-item" data-step="4">
-                        <div class="step-num">04</div>
-                        <div class="step-icon">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.71 1.1-1.63 1.1-2.58A5 5 0 0 1 4.5 16.5z"/><path d="M12 15l-3-3m0 0l-3 3m3-3V21"/><path d="M15 9l-3-3m0 0l-3 3m3-3v12"/></svg>
-                        </div>
-                        <div class="step-info">
-                            <span class="step-name">Phased Production</span>
-                            <span class="step-time">Weeks 9–20</span>
-                        </div>
-                    </button>
-
-                    <button class="step-nav-item" data-step="5">
-                        <div class="step-num">05</div>
-                        <div class="step-icon">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                        </div>
-                        <div class="step-info">
-                            <span class="step-name">Steady-State Ops</span>
-                            <span class="step-time">Week 20+ Ongoing</span>
-                        </div>
-                    </button>
-                </div>
-
-                <!-- Stepper Detail Card Container -->
-                <div class="step-detail-card" id="stepDetailCard"></div>
-            </div>
-        </section>
-
-        <!-- Gantt Style Visual Section -->
-        <section class="section gantt-section" id="gantt">
-            <div class="container">
-                <div class="section-header center">
-                    <span class="section-tag">PROJECT TIMELINE VISUALIZER</span>
-                    <h2 class="section-title">Interactive Deployment Timeline</h2>
-                    <p class="section-subtitle">Toggle between deployment scale profiles to explore expected phase durations, overlap windows, and critical milestones.</p>
-                </div>
-
-                <div class="gantt-controls">
-                    <span class="control-label">Select Deployment Profile:</span>
-                    <div class="toggle-switch-container">
-                        <button class="toggle-option active" id="btnSmallScale">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/></svg>
-                            <span>Standard Deployment (&lt;1,000 devices)</span>
+                        <button type="submit" class="btn btn-primary btn-block">
+                            <span>Save Credentials & Connect</span>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
                         </button>
-                        <button class="toggle-option" id="btnEnterpriseScale">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
-                            <span>Enterprise Scale (10,000+ devices)</span>
-                        </button>
+                    </form>
+                </div>
+
+                <!-- Persistent Device Monitoring & Emergency Control Panel -->
+                <div class="card-panel">
+                    <div class="card-header-bar">
+                        <h3><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg> Live Device Control Panel</h3>
+                        <span class="connection-state-indicator" id="monConnIndicator">Waiting for ESP32-01 connection...</span>
                     </div>
-                </div>
 
-                <div class="gantt-wrapper">
-                    <div class="gantt-header-weeks" id="ganttWeeksHeader"></div>
-                    <div class="gantt-body" id="ganttBody"></div>
-                </div>
+                    <div class="monitoring-metrics-grid">
+                        <div class="mini-mon-card">
+                            <span class="mini-label">Voltage Reading</span>
+                            <span class="mini-value text-cyan" id="monVoltage">-- V</span>
+                            <span class="mini-sub">AC Line Monitor</span>
+                        </div>
 
-                <div class="gantt-legend">
-                    <div class="legend-item"><span class="legend-box phase-1"></span> Phase 1: Discovery</div>
-                    <div class="legend-item"><span class="legend-box phase-2"></span> Phase 2: Design</div>
-                    <div class="legend-item"><span class="legend-box phase-3"></span> Phase 3: Pilot</div>
-                    <div class="legend-item"><span class="legend-box phase-4"></span> Phase 4: Production Rollout</div>
-                    <div class="legend-item"><span class="legend-box phase-5"></span> Phase 5: Steady-State</div>
+                        <div class="mini-mon-card">
+                            <span class="mini-label">Current Load</span>
+                            <span class="mini-value text-cyan" id="monCurrent">-- A</span>
+                            <span class="mini-sub">Shunt Sensor</span>
+                        </div>
+
+                        <div class="mini-mon-card">
+                            <span class="mini-label">Relay State</span>
+                            <span class="mini-value" id="monRelay">--</span>
+                            <span class="mini-sub">Hardware Contact</span>
+                        </div>
+
+                        <div class="mini-mon-card">
+                            <span class="mini-label">Motor Contactor</span>
+                            <span class="mini-value" id="monMotor">--</span>
+                            <span class="mini-sub">Drive Circuit</span>
+                        </div>
+                    </div>
+
+                    <div class="command-box">
+                        <h4>Hardware Remote Control</h4>
+                        <p class="text-muted">Pushes hardware execution commands to `/devices/ESP32-01/commands/latest`.</p>
+
+                        <div class="command-buttons-row">
+                            <button class="btn btn-danger btn-lg" id="btnCutRelayMain">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
+                                <span>DISABLE RELAY (CUT)</span>
+                            </button>
+
+                            <button class="btn btn-success btn-lg" id="btnEnableRelayMain">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                                <span>ENABLE RELAY (RESET)</span>
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </section>
 
-        <!-- Resources & Team Requirements Table -->
-        <section class="section resources-section" id="resources">
-            <div class="container">
-                <div class="section-header">
-                    <span class="section-tag">RESOURCE ALLOCATION</span>
-                    <h2 class="section-title">Team Requirements & Effort Allocation</h2>
-                    <p class="section-subtitle">A balanced co-delivery model ensuring minimal disruption to your daily security and OT operations team.</p>
+        <!-- TAB 3: REAL-TIME RFID ACCESS LOG -->
+        <section class="tab-pane" id="tab-rfid">
+            <div class="overview-header-row">
+                <h1 class="page-title">RFID Access Audit Log</h1>
+                <span class="log-count-badge" id="rfidLogCountBadge">0 Logs</span>
+            </div>
+
+            <div class="card-panel">
+                <!-- Log Filters Bar -->
+                <div class="filter-bar">
+                    <div class="filter-group">
+                        <input type="text" id="filterSearch" placeholder="Search UID or Operator Name...">
+                    </div>
+
+                    <div class="filter-group">
+                        <select id="filterStatus">
+                            <option value="ALL">All Scan Statuses</option>
+                            <option value="AUTHORIZED">AUTHORIZED Only</option>
+                            <option value="UNAUTHORIZED">UNAUTHORIZED Only</option>
+                        </select>
+                    </div>
+
+                    <button class="btn btn-glass" id="btnResetFilters">Reset Filters</button>
                 </div>
 
                 <div class="table-responsive">
                     <table class="resources-table">
                         <thead>
                             <tr>
-                                <th>Implementation Phase</th>
-                                <th>ZGuard Expert Team</th>
-                                <th>Customer Team Roles</th>
-                                <th>Estimated Effort</th>
-                                <th>Primary Milestone</th>
+                                <th>Timestamp</th>
+                                <th>Date</th>
+                                <th>Card UID</th>
+                                <th>User Name</th>
+                                <th>Zero Trust Status</th>
+                                <th>Device ID</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            <tr>
-                                <td class="phase-cell">
-                                    <div class="cell-phase-name">01. Discovery & Asset Inventory</div>
-                                    <span class="cell-weeks">Weeks 1–2</span>
-                                </td>
-                                <td>
-                                    <div class="role-chip"><span class="chip-dot blue"></span> Solutions Architect</div>
-                                    <div class="role-chip"><span class="chip-dot blue"></span> Security Engineer</div>
-                                </td>
-                                <td>
-                                    <div class="role-chip"><span class="chip-dot cyan"></span> IT/OT Systems Lead</div>
-                                    <div class="role-chip"><span class="chip-dot cyan"></span> Network Administrator</div>
-                                </td>
-                                <td><span class="effort-badge">~20 hrs / wk</span></td>
-                                <td>Device Inventory & Risk Heatmap</td>
-                            </tr>
-                            <tr>
-                                <td class="phase-cell">
-                                    <div class="cell-phase-name">02. Architecture & Baseline</div>
-                                    <span class="cell-weeks">Weeks 3–4</span>
-                                </td>
-                                <td>
-                                    <div class="role-chip"><span class="chip-dot blue"></span> Solutions Architect</div>
-                                </td>
-                                <td>
-                                    <div class="role-chip"><span class="chip-dot cyan"></span> CISO / Security Team</div>
-                                    <div class="role-chip"><span class="chip-dot cyan"></span> Compliance Officer</div>
-                                </td>
-                                <td><span class="effort-badge">~10 hrs / wk</span></td>
-                                <td>ZT Architecture Blueprint Sign-off</td>
-                            </tr>
-                            <tr>
-                                <td class="phase-cell">
-                                    <div class="cell-phase-name">03. Pilot Deployment</div>
-                                    <span class="cell-weeks">Weeks 5–8</span>
-                                </td>
-                                <td>
-                                    <div class="role-chip"><span class="chip-dot blue"></span> Deployment Engineer</div>
-                                    <div class="role-chip"><span class="chip-dot blue"></span> Support Architect</div>
-                                </td>
-                                <td>
-                                    <div class="role-chip"><span class="chip-dot cyan"></span> Site Operations Engineer</div>
-                                    <div class="role-chip"><span class="chip-dot cyan"></span> SOC Analyst</div>
-                                </td>
-                                <td><span class="effort-badge">~15 hrs / wk</span></td>
-                                <td>Pilot Success Metrics Report</td>
-                            </tr>
-                            <tr>
-                                <td class="phase-cell">
-                                    <div class="cell-phase-name">04. Phased Production Rollout</div>
-                                    <span class="cell-weeks">Weeks 9–20</span>
-                                </td>
-                                <td>
-                                    <div class="role-chip"><span class="chip-dot blue"></span> Lead Deployment Engineers</div>
-                                    <div class="role-chip"><span class="chip-dot blue"></span> Integration Specialist</div>
-                                </td>
-                                <td>
-                                    <div class="role-chip"><span class="chip-dot cyan"></span> Regional IT/OT Staff</div>
-                                    <div class="role-chip"><span class="chip-dot cyan"></span> IAM Administrator</div>
-                                </td>
-                                <td><span class="effort-badge">Varies by site count</span></td>
-                                <td>Site-by-Site Go-Live Sign-offs</td>
-                            </tr>
-                            <tr>
-                                <td class="phase-cell">
-                                    <div class="cell-phase-name">05. Steady-State Operations</div>
-                                    <span class="cell-weeks">Week 20+ Ongoing</span>
-                                </td>
-                                <td>
-                                    <div class="role-chip"><span class="chip-dot blue"></span> Customer Success Manager</div>
-                                    <div class="role-chip"><span class="chip-dot blue"></span> 24/7 Support Desk</div>
-                                </td>
-                                <td>
-                                    <div class="role-chip"><span class="chip-dot cyan"></span> SOC Team</div>
-                                    <div class="role-chip"><span class="chip-dot cyan"></span> Audit & Compliance</div>
-                                </td>
-                                <td><span class="effort-badge green">~5 hrs / wk</span></td>
-                                <td>Quarterly Business Reviews (QBR)</td>
-                            </tr>
+                        <tbody id="rfidTableBody">
+                            <tr><td colspan="6" class="text-center text-muted">Waiting for ESP32-01 RFID scan data...</td></tr>
                         </tbody>
                     </table>
                 </div>
             </div>
         </section>
 
-        <!-- Success Metrics & KPIs -->
-        <section class="section metrics-section" id="metrics">
-            <div class="container">
-                <div class="section-header center">
-                    <span class="section-tag">MEASURABLE OUTCOMES</span>
-                    <h2 class="section-title">Key Success Metrics & KPIs</h2>
-                    <p class="section-subtitle">Tangible, audited security benchmarks achieved upon completion of the ZGuard rollout.</p>
+        <!-- TAB 4: FAULT DETECTION & HEALTH -->
+        <section class="tab-pane" id="tab-faults">
+            <div class="overview-header-row">
+                <h1 class="page-title">Fault Detection & Health Indicators</h1>
+                <span class="overall-health-status" id="faultOverallStatus">SYSTEM STATUS: UNKNOWN</span>
+            </div>
+
+            <div class="faults-grid">
+                <div class="fault-card" id="faultVoltageCard">
+                    <div class="fault-icon blue">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                    </div>
+                    <h3>AC Voltage Stability</h3>
+                    <div class="fault-status" id="faultVoltageStatus">Normal (220V Baseline)</div>
+                    <p class="fault-desc">Threshold: 205V – 245V. Alarms trigger on persistent overvoltage.</p>
                 </div>
 
-                <div class="metrics-grid">
-                    <div class="metric-card">
-                        <div class="metric-icon blue">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
-                        </div>
-                        <div class="metric-number" data-target="100">0%</div>
-                        <div class="metric-title">Verified Identity Coverage</div>
-                        <p class="metric-desc">Every IoT/IIoT asset is assigned a cryptographically signed PKI identity certificate.</p>
+                <div class="fault-card" id="faultCurrentCard">
+                    <div class="fault-icon cyan">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                     </div>
-
-                    <div class="metric-card">
-                        <div class="metric-icon cyan">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                        </div>
-                        <div class="metric-number" id="mttdMetric">&lt; 3 Min</div>
-                        <div class="metric-title">Mean Time to Detect (MTTD)</div>
-                        <p class="metric-desc">Automated anomaly detection instantly identifies unverified protocol attempts.</p>
-                    </div>
-
-                    <div class="metric-card">
-                        <div class="metric-icon emerald">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 10z"/></svg>
-                        </div>
-                        <div class="metric-number" data-target="96">0%</div>
-                        <div class="metric-title">Lateral Movement Reduction</div>
-                        <p class="metric-desc">Micro-segmentation isolates compromise vectors within strict zone boundaries.</p>
-                    </div>
-
-                    <div class="metric-card">
-                        <div class="metric-icon indigo">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                        </div>
-                        <div class="metric-number" data-target="100">0%</div>
-                        <div class="metric-title">Just-In-Time Vendor Access</div>
-                        <p class="metric-desc">Third-party maintenance access requires short-lived, ephemeral credentials.</p>
-                    </div>
-
-                    <div class="metric-card highlight-card">
-                        <div class="metric-icon green">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                        </div>
-                        <div class="metric-number">0 Hours</div>
-                        <div class="metric-title">Unplanned Downtime</div>
-                        <p class="metric-desc">Observe-mode baseline validation guarantees continuous operational continuity.</p>
-                    </div>
+                    <h3>Current Load Monitor</h3>
+                    <div class="fault-status" id="faultCurrentStatus">Normal (&lt; 7.0A)</div>
+                    <p class="fault-desc">Threshold: 7.0A max. Prevents industrial motor overload burnout.</p>
                 </div>
 
-                <!-- Interactive Risk Simulator -->
-                <div class="risk-simulator-box">
-                    <div class="sim-header">
-                        <h3>Interactive Risk Reduction Simulator</h3>
-                        <p>Adjust rollout week slider to visualize risk score dropping as ZGuard policy enforcement matures.</p>
+                <div class="fault-card" id="faultRfidBurstCard">
+                    <div class="fault-icon rose">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                     </div>
+                    <h3>Zero Trust RFID Burst Detection</h3>
+                    <div class="fault-status" id="faultRfidBurstStatus">Clear (0 Bursts)</div>
+                    <p class="fault-desc">Triggers when ≥ 3 unauthorized RFID scans occur within 60s.</p>
+                </div>
 
-                    <div class="sim-body">
-                        <div class="sim-slider-row">
-                            <label for="simWeekSlider">Rollout Progress: <strong id="simWeekVal" class="text-cyan">Week 10</strong></label>
-                            <input type="range" id="simWeekSlider" min="1" max="20" value="10" step="1">
-                        </div>
-
-                        <div class="sim-results-grid">
-                            <div class="sim-result-card">
-                                <span class="sim-result-label">Residual Network Risk Score</span>
-                                <div class="risk-bar-container">
-                                    <div class="risk-bar" id="simRiskBar" style="width: 45%; background: var(--cyan-500);"></div>
-                                </div>
-                                <span class="sim-result-value" id="simRiskVal">45 / 100 (Moderate Risk)</span>
-                            </div>
-
-                            <div class="sim-result-card">
-                                <span class="sim-result-label">Enforced Device Policies</span>
-                                <span class="sim-stat-val text-emerald" id="simPolicyVal">50% Enforced</span>
-                                <span class="sim-stat-sub">Observe mode active on remaining 50%</span>
-                            </div>
-                        </div>
+                <div class="fault-card" id="faultOfflineCard">
+                    <div class="fault-icon amber">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                     </div>
+                    <h3>Heartbeat & Communication</h3>
+                    <div class="fault-status" id="faultOfflineStatus">Waiting for Connection</div>
+                    <p class="fault-desc">Triggers if `last_seen` timestamp is older than 10 seconds.</p>
                 </div>
             </div>
         </section>
 
-        <!-- Deployment Model Options (Tabbed Layout) -->
-        <section class="section deployment-section" id="deployment">
-            <div class="container">
-                <div class="section-header center">
-                    <span class="section-tag">ARCHITECTURE FLEXIBILITY</span>
-                    <h2 class="section-title">Deployment Model Options</h2>
-                    <p class="section-subtitle">Adapt ZGuard to your exact network topology, latency tolerance, and regulatory compliance constraints.</p>
-                </div>
-
-                <div class="tab-buttons" id="deploymentTabs">
-                    <button class="tab-btn active" data-tab="onprem">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
-                        <span>On-Premises Air-Gapped</span>
-                    </button>
-                    <button class="tab-btn" data-tab="cloud">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
-                        <span>Cloud-Hosted SaaS</span>
-                    </button>
-                    <button class="tab-btn" data-tab="hybrid">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-                        <span>Hybrid Cloud Engine</span>
-                    </button>
-                    <button class="tab-btn" data-tab="edge">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                        <span>Edge-Native OT</span>
-                    </button>
-                </div>
-
-                <div class="tab-content-container" id="deploymentContent"></div>
+        <!-- TAB 5: AI THREAT & MAINTENANCE AGENTS -->
+        <section class="tab-pane" id="tab-ai">
+            <div class="overview-header-row">
+                <h1 class="page-title">AI Security & Predictive Maintenance Agents</h1>
             </div>
-        </section>
 
-        <!-- Risk Mitigation Callouts -->
-        <section class="section risk-section" id="risk">
-            <div class="container">
-                <div class="section-header center">
-                    <span class="section-tag">EXECUTIVE ASSURANCES</span>
-                    <h2 class="section-title">Risk Mitigation & Enterprise Safeguards</h2>
-                    <p class="section-subtitle">Addressing your CISO, OT Director, and Procurement team's key deployment concerns.</p>
+            <div class="ai-grid">
+                <!-- Security Agent Panel -->
+                <div class="card-panel">
+                    <div class="card-header-bar">
+                        <h3><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Zero Trust Security Agent</h3>
+                        <span class="agent-tag violet">LLM SECURITY WATCHER</span>
+                    </div>
+
+                    <div class="agent-score-box">
+                        <span class="agent-score-lbl">Evaluated Threat Risk Score</span>
+                        <div class="agent-score-val text-rose" id="aiSecurityRiskScore">-- %</div>
+                    </div>
+
+                    <div class="agent-output-box">
+                        <span class="agent-out-lbl">Reasoning Summary</span>
+                        <p class="agent-out-text" id="aiSecurityReason">Waiting for backend security event analysis...</p>
+                    </div>
+
+                    <div class="agent-output-box">
+                        <span class="agent-out-lbl">Recommended Action</span>
+                        <p class="agent-out-text text-cyan" id="aiSecurityRec">No lockdown active.</p>
+                    </div>
                 </div>
 
-                <div class="risk-cards-grid">
-                    <div class="risk-callout-card">
-                        <div class="risk-icon-wrapper red-gradient">
-                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
-                        </div>
-                        <h3>No Rip-and-Replace Guarantee</h3>
-                        <p>Legacy PLCs, unmanaged OT controllers, and sensitive medical hardware are protected via <strong>ZGuard Transparent Edge Gateways</strong> without requiring firmware modifications or hardware replacement.</p>
-                        <ul class="risk-check-list">
-                            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Supports legacy serial, Modbus, BACnet, Profinet</li>
-                            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Zero downtime proxy deployment</li>
-                        </ul>
+                <!-- Predictive Maintenance Agent Panel -->
+                <div class="card-panel">
+                    <div class="card-header-bar">
+                        <h3><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.9 6.91a2.12 2.12 0 0 1-3-3l6.91-6.9a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> Predictive Maintenance Agent</h3>
+                        <span class="agent-tag teal">TREND WATCHER</span>
                     </div>
 
-                    <div class="risk-callout-card">
-                        <div class="risk-icon-wrapper amber-gradient">
-                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                        </div>
-                        <h3>Observe-Before-Enforce Engine</h3>
-                        <p>All security rules run in <strong>Monitor & Shadow Mode</strong> for a mandatory 14-day baseline period. Traffic is analyzed and mapped without dropping a single valid industrial frame.</p>
-                        <ul class="risk-check-list">
-                            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Simulated enforcement impact reports</li>
-                            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Automated policy refinement wizard</li>
-                        </ul>
+                    <div class="agent-score-box">
+                        <span class="agent-score-lbl">Hardware Health Prediction</span>
+                        <div class="agent-score-val text-emerald" id="aiPmConfidence">Healthy (100% Conf)</div>
                     </div>
 
-                    <div class="risk-callout-card">
-                        <div class="risk-icon-wrapper blue-gradient">
-                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                        </div>
-                        <h3>Phased Site-by-Site Rollback</h3>
-                        <p>Rollout is executed in micro-zones (single assembly line, laboratory, or building wing). If any anomaly occurs, one-click fallback instantly restores legacy bypass state.</p>
-                        <ul class="risk-check-list">
-                            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Sub-second fail-open hardware bypass</li>
-                            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Blast radius strictly isolated to single zone</li>
-                        </ul>
+                    <div class="agent-output-box">
+                        <span class="agent-out-lbl">Telemetry Trend Findings</span>
+                        <p class="agent-out-text" id="aiPmSummary">Voltage and current trends within normal industrial operating limits.</p>
                     </div>
+                </div>
+            </div>
+
+            <!-- AI Event Timeline Stream -->
+            <div class="card-panel margin-top-2">
+                <div class="card-header-bar">
+                    <h3><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Live AI Event & Incident Timeline Stream</h3>
+                </div>
+
+                <div class="timeline-stream-box" id="aiTimelineStream">
+                    <div class="text-muted text-center">No security incidents or backend events logged yet.</div>
                 </div>
             </div>
         </section>
 
-        <!-- Lead Form & Timeline Estimator Section -->
-        <section class="section lead-section" id="lead-form">
-            <div class="container">
-                <div class="lead-grid">
-                    <div class="lead-info">
-                        <span class="section-tag">CUSTOM BLUEPRINT CALCULATOR</span>
-                        <h2 class="section-title">Get a Custom Implementation Timeline for Your Environment</h2>
-                        <p class="section-subtitle">Fill in your deployment scope to calculate an exact project timeline, team effort matrix, and recommended architecture options.</p>
-
-                        <div class="lead-highlights">
-                            <div class="highlight-item">
-                                <div class="highlight-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></div>
-                                <div>
-                                    <strong>Custom Deliverable PDF Report</strong>
-                                    <p>Detailed architecture blueprint tailored to your device inventory count.</p>
-                                </div>
-                            </div>
-                            <div class="highlight-item">
-                                <div class="highlight-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
-                                <div>
-                                    <strong>Direct Access to Solutions Engineers</strong>
-                                    <p>No high-pressure sales calls. Speak with senior security engineers.</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="lead-card">
-                        <form id="calculatorForm" novalidate>
-                            <div class="form-group">
-                                <label for="companyName">Company / Organization *</label>
-                                <input type="text" id="companyName" required placeholder="e.g. Acme Industrial Technologies">
-                                <span class="error-msg" id="companyNameError">Please enter your company name</span>
-                            </div>
-
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label for="workEmail">Work Email *</label>
-                                    <input type="email" id="workEmail" required placeholder="ciso@company.com">
-                                    <span class="error-msg" id="workEmailError">Please enter a valid enterprise email</span>
-                                </div>
-
-                                <div class="form-group">
-                                    <label for="industryVertical">Industry Vertical *</label>
-                                    <select id="industryVertical" required>
-                                        <option value="">Select Vertical...</option>
-                                        <option value="Manufacturing & Industrial OT">Manufacturing & Industrial OT</option>
-                                        <option value="Healthcare & Hospital IoT">Healthcare & Hospital IoT</option>
-                                        <option value="Energy & Utilities SCADA">Energy & Utilities SCADA</option>
-                                        <option value="Logistics & Transportation">Logistics & Transportation</option>
-                                        <option value="Smart Buildings & Defense">Smart Buildings & Defense</option>
-                                    </select>
-                                    <span class="error-msg" id="industryError">Please select your industry vertical</span>
-                                </div>
-                            </div>
-
-                            <div class="form-group">
-                                <div class="slider-label-row">
-                                    <label for="deviceCount">Approximate Device Count:</label>
-                                    <span class="slider-value" id="deviceCountVal">5,000 Devices</span>
-                                </div>
-                                <input type="range" id="deviceCount" min="200" max="50000" step="500" value="5000">
-                                <div class="slider-ticks">
-                                    <span>200</span>
-                                    <span>5k</span>
-                                    <span>20k</span>
-                                    <span>50k+</span>
-                                </div>
-                            </div>
-
-                            <div class="form-group">
-                                <label for="netArch">Current Network Architecture *</label>
-                                <select id="netArch" required>
-                                    <option value="Legacy Flat Network (No Segmentation)">Legacy Flat Network (No Segmentation)</option>
-                                    <option value="Partial VLAN Segmentation">Partial VLAN Segmentation</option>
-                                    <option value="Air-gapped Industrial OT">Air-gapped Industrial OT</option>
-                                    <option value="Multi-Cloud Hybrid Network">Multi-Cloud Hybrid Network</option>
-                                </select>
-                            </div>
-
-                            <!-- Live Calculator Summary Box -->
-                            <div class="calc-estimate-box">
-                                <div class="calc-header">Estimated Rollout Calculation</div>
-                                <div class="calc-grid">
-                                    <div>
-                                        <span class="calc-lbl">Estimated Duration</span>
-                                        <span class="calc-val text-cyan" id="calcEstWeeks">16 Weeks</span>
-                                    </div>
-                                    <div>
-                                        <span class="calc-lbl">Recommended Mode</span>
-                                        <span class="calc-val text-emerald" id="calcEstMode">Hybrid Edge Gateway</span>
-                                    </div>
-                                    <div>
-                                        <span class="calc-lbl">ZGuard Team Needed</span>
-                                        <span class="calc-val text-indigo" id="calcEstEngineers">3 Engineers</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <button type="submit" class="btn btn-primary btn-block btn-lg" id="submitBtn">
-                                <span>Generate Custom Timeline & Plan</span>
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-                            </button>
-                        </form>
-                    </div>
-                </div>
-            </div>
-        </section>
     </main>
 
     <!-- Footer -->
     <footer class="site-footer">
-        <div class="container footer-grid">
-            <div class="footer-brand">
-                <div class="brand-logo">
-                    <div class="logo-icon">
-                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
-                    </div>
-                    <span class="brand-name">ZGUARD</span>
-                </div>
-                <p>Zero Trust IoT & OT Security Architecture Platform for Enterprise Operations.</p>
-                <div class="copyright">© 2026 ZGuard Inc. All rights reserved.</div>
+        <div class="container footer-inner-simple">
+            <div class="brand-logo">
+                <div class="logo-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+                <span class="brand-name">ZGUARD</span>
             </div>
-
-            <div class="footer-links-col">
-                <h4>Implementation</h4>
-                <a href="#roadmap">5-Phase Roadmap</a>
-                <a href="#gantt">Gantt Visualizer</a>
-                <a href="#resources">Resource Allocation</a>
-                <a href="#deployment">Deployment Models</a>
-            </div>
-
-            <div class="footer-links-col">
-                <h4>Compliance</h4>
-                <a href="#">IEC 62443 Matrix</a>
-                <a href="#">NIS 2 Compliance Guide</a>
-                <a href="#">NIST 800-207 Audit</a>
-                <a href="#">SOC 2 Type II Report</a>
-            </div>
-
-            <div class="footer-links-col">
-                <h4>Solutions Architecture</h4>
-                <a href="#lead-form">Custom Estimator</a>
-                <a href="#">Request Architecture Call</a>
-                <a href="#">Download Whitepaper</a>
-                <a href="#">Security Operations Portal</a>
-            </div>
+            <span class="footer-desc">Single-Device Industrial IoT Security Monitor — Device ID: <strong id="footerDevId">ESP32-01</strong></span>
+            <span class="copyright">© 2026 ZGuard Inc. All rights reserved.</span>
         </div>
     </footer>
-
-    <!-- Success Modal Dialog -->
-    <div class="modal-backdrop" id="successModal">
-        <div class="modal-card">
-            <button class="modal-close" id="modalCloseBtn">&times;</button>
-            <div class="modal-icon green">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-            </div>
-            <h3 class="modal-title">Implementation Blueprint Generated!</h3>
-            <p class="modal-subtitle">Thank you, <strong id="modalCompName">Customer</strong>. A Senior Solutions Architect has been assigned to your environment request.</p>
-
-            <div class="modal-summary-box">
-                <div class="modal-summary-item">
-                    <span>Target Device Scope:</span>
-                    <strong id="modalDeviceCount">5,000 Devices</strong>
-                </div>
-                <div class="modal-summary-item">
-                    <span>Estimated Timeline:</span>
-                    <strong class="text-cyan" id="modalTimelineWeeks">16 Weeks (Phased Rollout)</strong>
-                </div>
-                <div class="modal-summary-item">
-                    <span>Recommended Model:</span>
-                    <strong id="modalDeploymentModel">Hybrid Cloud + Edge Proxy</strong>
-                </div>
-            </div>
-
-            <div class="modal-actions">
-                <button class="btn btn-primary btn-block" id="modalOkBtn">Close & Review Roadmap</button>
-            </div>
-        </div>
-    </div>
 
     <!-- Application Script Engine -->
     <script src="firebase-config.js"></script>

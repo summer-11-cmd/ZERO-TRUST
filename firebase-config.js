@@ -1,20 +1,13 @@
 /* ==========================================================================
-   ZGUARD - Firebase Realtime Database Client & Real-time Hooks
+   ZGUARD — Industrial Single-Device Firebase RTDB Client & Realtime Engine
    ========================================================================== */
 
-// Default Firebase Configuration Placeholder (User can update or inject via window.FIREBASE_CONFIG)
-const defaultFirebaseConfig = {
-    apiKey: "AIzaSyYOUR_API_KEY_HERE",
-    authDomain: "zguard-iot.firebaseapp.com",
-    databaseURL: "https://zguard-iot-default-rtdb.firebaseio.com",
-    projectId: "zguard-iot",
-    storageBucket: "zguard-iot.appspot.com",
-    messagingSenderId: "1234567890",
-    appId: "1:1234567890:web:abcdef123456"
-};
+// Default / Stored Credentials Key in localStorage
+const STORAGE_KEY = "zguard_firebase_credentials";
 
-// Global State Bus for Firebase Data
+// Global State Bus for Single-Device ZGuard Dashboard
 window.ZGUARD_STATE = {
+    credentialsConfigured: false,
     deviceId: "ESP32-01",
     connectionStatus: "waiting", // "waiting" | "live" | "offline"
     live: null,
@@ -22,10 +15,15 @@ window.ZGUARD_STATE = {
     securityEvents: [],
     aiIncidents: [],
     latestCommand: null,
-    listeners: []
+    
+    // Live Computed Metrics
+    healthScore: 100,
+    unauthorizedToday: 0,
+    trustedDevices: 1,
+    onlineDevices: 0
 };
 
-// State Change Subscribers
+// Subscribers for UI updates
 window.ZGUARD_SUBSCRIBERS = [];
 
 function subscribeZGuardState(callback) {
@@ -33,7 +31,65 @@ function subscribeZGuardState(callback) {
 }
 
 function notifySubscribers() {
+    // Recompute Live Health Metrics from Real Data
+    computeLiveMetrics();
     window.ZGUARD_SUBSCRIBERS.forEach(cb => cb(window.ZGUARD_STATE));
+}
+
+/**
+ * Recomputes System Health Score & Unauthorized Attempts Today from real Firebase state
+ */
+function computeLiveMetrics() {
+    const live = window.ZGUARD_STATE.live;
+    const rfidLogs = window.ZGUARD_STATE.rfidLogs;
+    const secEvents = window.ZGUARD_STATE.securityEvents;
+
+    // 1. Online Device Count
+    window.ZGUARD_STATE.onlineDevices = (window.ZGUARD_STATE.connectionStatus === "live") ? 1 : 0;
+
+    // 2. Compute Today's Unauthorized Scans Count
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const todayMs = startOfToday.getTime();
+
+    let unauthCount = 0;
+    if (rfidLogs && rfidLogs.length) {
+        rfidLogs.forEach(log => {
+            const logTime = log.timestamp || 0;
+            if (log.status === "UNAUTHORIZED" && logTime >= todayMs) {
+                unauthCount++;
+            }
+        });
+    }
+    window.ZGUARD_STATE.unauthorizedToday = unauthCount;
+
+    // 3. Compute Live Health Score (100 Base)
+    if (!live || window.ZGUARD_STATE.connectionStatus !== "live") {
+        window.ZGUARD_STATE.healthScore = 0; // 0 if no device connected / offline
+        return;
+    }
+
+    let score = 100;
+    const voltage = parseFloat(live.voltage) || 220;
+    const current = parseFloat(live.current) || 4.0;
+
+    // Deduct for voltage/current anomalies
+    if (voltage > 245 || voltage < 205) score -= 15;
+    if (current > 7.0) score -= 20;
+    if (live.relay_status === "OFF") score -= 10;
+
+    // Deduct for unauthorized scans
+    score -= (unauthCount * 5);
+
+    // Deduct for active critical security events
+    if (secEvents && secEvents.length) {
+        secEvents.forEach(ev => {
+            if (ev.severity === "critical") score -= 25;
+            else if (ev.severity === "warning") score -= 10;
+        });
+    }
+
+    window.ZGUARD_STATE.healthScore = Math.max(0, Math.min(100, score));
 }
 
 /**
@@ -54,12 +110,57 @@ function evaluateConnectionStatus(liveData) {
 }
 
 /**
- * Initialize Firebase RTDB connection or fallback simulator
+ * Load credentials from localStorage
+ */
+function getStoredCredentials() {
+    try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) return JSON.parse(stored);
+    } catch (e) {
+        console.warn("[ZGuard Creds] Reading localStorage failed:", e);
+    }
+    return null;
+}
+
+/**
+ * Save user's Firebase project credentials to localStorage & initialize RTDB
+ */
+function saveFirebaseCredentials(apiKey, dbUrl, projectId, deviceId) {
+    const creds = {
+        apiKey: apiKey.trim(),
+        databaseURL: dbUrl.trim(),
+        projectId: projectId.trim(),
+        deviceId: (deviceId || "ESP32-01").trim()
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(creds));
+    window.ZGUARD_STATE.deviceId = creds.deviceId;
+    window.ZGUARD_STATE.credentialsConfigured = true;
+    initFirebaseClient();
+}
+
+/**
+ * Initialize Firebase RTDB connection using user's configured credentials
  */
 function initFirebaseClient() {
-    const config = window.FIREBASE_CONFIG || defaultFirebaseConfig;
-    
-    // Check if Firebase JS SDK is loaded via script tag
+    const creds = getStoredCredentials();
+    if (!creds || !creds.apiKey || !creds.databaseURL) {
+        console.log("[ZGuard Firebase] No credentials configured. Waiting for user setup.");
+        window.ZGUARD_STATE.credentialsConfigured = false;
+        window.ZGUARD_STATE.connectionStatus = "waiting";
+        notifySubscribers();
+        return;
+    }
+
+    window.ZGUARD_STATE.credentialsConfigured = true;
+    window.ZGUARD_STATE.deviceId = creds.deviceId || "ESP32-01";
+
+    const config = {
+        apiKey: creds.apiKey,
+        authDomain: `${creds.projectId || 'zguard-iot'}.firebaseapp.com`,
+        databaseURL: creds.databaseURL,
+        projectId: creds.projectId || "zguard-iot"
+    };
+
     if (window.firebase && window.firebase.database) {
         try {
             if (!firebase.apps.length) {
@@ -68,7 +169,7 @@ function initFirebaseClient() {
             const db = firebase.database();
             const deviceId = window.ZGUARD_STATE.deviceId;
 
-            console.log(`[ZGuard Firebase] Subscribing to /devices/${deviceId}...`);
+            console.log(`[ZGuard RTDB] Connected to /devices/${deviceId}...`);
 
             // Listen to /devices/{deviceId}/live
             db.ref(`/devices/${deviceId}/live`).on('value', (snapshot) => {
@@ -95,8 +196,6 @@ function initFirebaseClient() {
                     events.unshift({ id: child.key, ...child.val() });
                 });
                 window.ZGUARD_STATE.securityEvents = events;
-                
-                // Trigger 3D Particle Burst on new security event
                 if (window.triggerSecurityParticleBurst) {
                     window.triggerSecurityParticleBurst();
                 }
@@ -119,7 +218,7 @@ function initFirebaseClient() {
                 notifySubscribers();
             });
 
-            // Periodically re-evaluate staleness every 3 seconds
+            // Periodically check staleness every 3s
             setInterval(() => {
                 if (window.ZGUARD_STATE.live) {
                     const newStatus = evaluateConnectionStatus(window.ZGUARD_STATE.live);
@@ -132,16 +231,15 @@ function initFirebaseClient() {
 
             return;
         } catch (err) {
-            console.warn("[ZGuard Firebase] Initializing Firebase SDK failed or credentials invalid, using Demo Simulator:", err);
+            console.error("[ZGuard RTDB Error] Failed to initialize Firebase SDK:", err);
         }
+    } else {
+        console.warn("[ZGuard RTDB] Firebase JS SDK not found on window object.");
     }
-
-    // Fallback Demo Live Simulator if Firebase SDK is awaiting user credentials
-    initDemoLiveSimulator();
 }
 
 /**
- * Send command to Firebase RTDB: /devices/{deviceId}/commands/latest
+ * Dispatch hardware control command: /devices/{deviceId}/commands/latest
  */
 function sendDeviceCommand(cmdType) {
     const deviceId = window.ZGUARD_STATE.deviceId;
@@ -150,70 +248,10 @@ function sendDeviceCommand(cmdType) {
         issued_at: Date.now()
     };
 
-    if (window.firebase && window.firebase.apps.length) {
+    if (window.firebase && window.firebase.apps && window.firebase.apps.length) {
         firebase.database().ref(`/devices/${deviceId}/commands/latest`).set(payload);
+        console.log(`[ZGuard Command Dispatch] Pushed ${cmdType} to /devices/${deviceId}/commands/latest`);
     } else {
-        console.log(`[ZGuard Command Demo] Sent command to ${deviceId}:`, payload);
-        if (window.ZGUARD_STATE.live) {
-            window.ZGUARD_STATE.live.relay_status = (cmdType === "DISABLE_RELAY") ? "OFF" : "ON";
-            window.ZGUARD_STATE.latestCommand = payload;
-            notifySubscribers();
-        }
+        console.warn("[ZGuard Command] Firebase connection not active. Cannot send command.");
     }
-}
-
-/**
- * Demo Realtime Simulator to showcase live state & 3D particle bursts before Firebase credentials are inputted
- */
-function initDemoLiveSimulator() {
-    console.log("[ZGuard Simulator] Running Demo Simulator for ESP32-01...");
-    
-    // Initial State: Waiting for connection
-    window.ZGUARD_STATE.connectionStatus = "waiting";
-    notifySubscribers();
-
-    // After 2.5 seconds: ESP32-01 comes online
-    setTimeout(() => {
-        window.ZGUARD_STATE.connectionStatus = "live";
-        window.ZGUARD_STATE.live = {
-            voltage: 228.4,
-            current: 4.12,
-            relay_status: "ON",
-            motor_status: "RUNNING",
-            rfid_last_uid: "A3-89-F1-02",
-            rfid_last_status: "AUTHORIZED",
-            online: true,
-            last_seen: Date.now()
-        };
-
-        window.ZGUARD_STATE.rfidLogs = [
-            { id: "log-1", uid: "A3-89-F1-02", status: "AUTHORIZED", user_name: "Operator Sarah", timestamp: Date.now() - 120000 },
-            { id: "log-2", uid: "FF-44-12-88", status: "UNAUTHORIZED", user_name: null, timestamp: Date.now() - 300000 },
-            { id: "log-3", uid: "8C-12-99-B0", status: "AUTHORIZED", user_name: "Tech Lead Alex", timestamp: Date.now() - 600000 }
-        ];
-
-        window.ZGUARD_STATE.securityEvents = [
-            {
-                id: "sec-1",
-                type: "unauthorized_rfid_burst",
-                severity: "warning",
-                risk_score: 42,
-                reason: "Multiple unauthorized RFID scans detected in 60s window.",
-                recommendation: "Monitor zone closely or issue DISABLE_RELAY.",
-                timestamp: Date.now() - 180000
-            }
-        ];
-
-        notifySubscribers();
-    }, 2500);
-
-    // Heartbeat simulator every 2 seconds
-    setInterval(() => {
-        if (window.ZGUARD_STATE.live && window.ZGUARD_STATE.connectionStatus === "live") {
-            window.ZGUARD_STATE.live.last_seen = Date.now();
-            window.ZGUARD_STATE.live.voltage = (220 + Math.random() * 12).toFixed(1);
-            window.ZGUARD_STATE.live.current = (3.8 + Math.random() * 0.8).toFixed(2);
-            notifySubscribers();
-        }
-    }, 2000);
 }
