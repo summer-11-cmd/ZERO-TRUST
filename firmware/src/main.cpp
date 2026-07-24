@@ -171,8 +171,6 @@ void loop() {
         float rawCurrent = analogRead(CURRENT_ADC_PIN) * (3.3 / 4095.0) * 2.0;
 
         FirebaseJson liveJson;
-        liveJson.add("voltage", rawVoltage > 10 ? rawVoltage : 230.2);
-        liveJson.add("current", rawCurrent > 0.1 ? rawCurrent : 4.15);
         liveJson.add("relay_status", digitalRead(RELAY_PIN) == HIGH ? "ON" : "OFF");
         liveJson.add("motor_status", digitalRead(MOTOR_PIN) == HIGH ? "RUNNING" : "STOPPED");
         liveJson.add("online", true);

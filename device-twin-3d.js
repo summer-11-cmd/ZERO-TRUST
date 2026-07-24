@@ -1,11 +1,12 @@
 /* ==========================================================================
    ZGUARD - 3D Device Twin Panel Component (Three.js / WebGL)
+   Includes Animated DC Motor (Spins when motor_status === "RUNNING")
    ========================================================================== */
 
-let scene, camera, renderer, deviceNode, ringMesh, particleSystem;
+let scene, camera, renderer, deviceNode, ringMesh, particleSystem, motorRotor;
 let isParticleBurstActive = false;
 let burstTimer = 0;
-let ringGlowColor = 0x10b981; // Default Green (Safe)
+let ringGlowColor = 0x059669; // Default Green (Safe)
 
 /**
  * Initialize 3D Device Twin Canvas
@@ -39,26 +40,26 @@ function init3DDeviceTwin(containerId) {
         container.appendChild(renderer.domElement);
 
         // Lighting
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
         scene.add(ambientLight);
 
-        const pointLight = new THREE.PointLight(0x06b6d4, 2.5, 50);
+        const pointLight = new THREE.PointLight(0x0284c7, 2.5, 50);
         pointLight.position.set(10, 15, 10);
         scene.add(pointLight);
 
-        const fillLight = new THREE.PointLight(0x3b82f6, 1.2, 50);
+        const fillLight = new THREE.PointLight(0x2563eb, 1.2, 50);
         fillLight.position.set(-10, -10, -10);
         scene.add(fillLight);
 
-        // Create ESP32 Abstract Device Node (Isometric Shield / Gateway)
+        // Create ESP32 Abstract Device Node
         const nodeGroup = new THREE.Group();
 
-        // Base Board (Dark Slate Metallic Plate)
-        const boardGeo = new THREE.BoxGeometry(7, 0.6, 9);
+        // Base Board (Light Metallic Slate Plate)
+        const boardGeo = new THREE.BoxGeometry(8, 0.6, 10);
         const boardMat = new THREE.MeshStandardMaterial({
-            color: 0x0f172a,
-            roughness: 0.3,
-            metalness: 0.8
+            color: 0xe2e8f0,
+            roughness: 0.4,
+            metalness: 0.6
         });
         const boardMesh = new THREE.Mesh(boardGeo, boardMat);
         nodeGroup.add(boardMesh);
@@ -66,30 +67,78 @@ function init3DDeviceTwin(containerId) {
         // Microcontroller Chip (ESP32 Core)
         const chipGeo = new THREE.BoxGeometry(3, 0.4, 4);
         const chipMat = new THREE.MeshStandardMaterial({
-            color: 0x1e293b,
+            color: 0x334155,
             roughness: 0.2,
-            metalness: 0.9
+            metalness: 0.8
         });
         const chipMesh = new THREE.Mesh(chipGeo, chipMat);
-        chipMesh.position.set(0, 0.5, 0);
+        chipMesh.position.set(-2, 0.5, -1);
         nodeGroup.add(chipMesh);
 
         // Security Shield Emblem on Chip
-        const shieldGeo = new THREE.CylinderGeometry(0.8, 0.8, 0.2, 6);
-        const shieldMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4, wireframe: true });
+        const shieldGeo = new THREE.CylinderGeometry(0.7, 0.7, 0.2, 6);
+        const shieldMat = new THREE.MeshBasicMaterial({ color: 0x0284c7, wireframe: true });
         const shieldMesh = new THREE.Mesh(shieldGeo, shieldMat);
-        shieldMesh.position.set(0, 0.8, 0);
+        shieldMesh.position.set(-2, 0.8, -1);
         nodeGroup.add(shieldMesh);
+
+        // --- DC MOTOR 3D ASSEMBLY ---
+        const motorGroup = new THREE.Group();
+        motorGroup.position.set(2.2, 1.0, 1.5);
+
+        // Motor Housing (Cylinder Casing)
+        const housingGeo = new THREE.CylinderGeometry(1.2, 1.2, 2.0, 24);
+        const housingMat = new THREE.MeshStandardMaterial({
+            color: 0x64748b,
+            metalness: 0.9,
+            roughness: 0.3
+        });
+        const housingMesh = new THREE.Mesh(housingGeo, housingMat);
+        motorGroup.add(housingMesh);
+
+        // Motor Base Mount Brackets
+        const mountGeo = new THREE.BoxGeometry(2.8, 0.3, 1.6);
+        const mountMat = new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.8 });
+        const mountMesh = new THREE.Mesh(mountGeo, mountMat);
+        mountMesh.position.set(0, -0.9, 0);
+        motorGroup.add(mountMesh);
+
+        // Spinning Rotor Assembly (Shaft + Blades)
+        const rotorGroup = new THREE.Group();
+        rotorGroup.position.set(0, 1.1, 0);
+
+        // Central Shaft Pin
+        const shaftGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.8, 12);
+        const shaftMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, metalness: 0.9 });
+        const shaftMesh = new THREE.Mesh(shaftGeo, shaftMat);
+        rotorGroup.add(shaftMesh);
+
+        // Fan Blades on Rotor Pin
+        const bladeGeo = new THREE.BoxGeometry(1.8, 0.08, 0.3);
+        const bladeMat = new THREE.MeshBasicMaterial({ color: 0x0284c7 });
+        const blade1 = new THREE.Mesh(bladeGeo, bladeMat);
+        blade1.position.y = 0.3;
+        rotorGroup.add(blade1);
+
+        const blade2 = new THREE.Mesh(bladeGeo, bladeMat);
+        blade2.rotation.y = Math.PI / 2;
+        blade2.position.y = 0.3;
+        rotorGroup.add(blade2);
+
+        motorGroup.add(rotorGroup);
+        motorRotor = rotorGroup; // Save handle for continuous rotation animation
+
+        nodeGroup.add(motorGroup);
 
         // Status LED Indicator
         const ledGeo = new THREE.SphereGeometry(0.35, 16, 16);
-        const ledMat = new THREE.MeshBasicMaterial({ color: 0x10b981 });
+        const ledMat = new THREE.MeshBasicMaterial({ color: 0x059669 });
         const ledMesh = new THREE.Mesh(ledGeo, ledMat);
-        ledMesh.position.set(2.4, 0.5, -3.2);
+        ledMesh.position.set(-3.2, 0.5, -4.0);
         nodeGroup.add(ledMesh);
 
-        // Outer Pulsing Glow Ring (Reflects Zero-Trust Risk Score)
-        const ringGeo = new THREE.RingGeometry(5.8, 6.3, 48);
+        // Outer Pulsing Glow Ring
+        const ringGeo = new THREE.RingGeometry(6.2, 6.7, 48);
         const ringMat = new THREE.MeshBasicMaterial({
             color: ringGlowColor,
             side: THREE.DoubleSide,
@@ -101,7 +150,7 @@ function init3DDeviceTwin(containerId) {
         ringMesh.position.y = -0.2;
         nodeGroup.add(ringMesh);
 
-        // Particle Burst System (50 Particles)
+        // Particle Burst System
         const particleCount = 60;
         const particleGeo = new THREE.BufferGeometry();
         const positions = new Float32Array(particleCount * 3);
@@ -121,7 +170,7 @@ function init3DDeviceTwin(containerId) {
 
         particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
         const particleMat = new THREE.PointsMaterial({
-            color: 0xf43f5e,
+            color: 0xdc2626,
             size: 0.4,
             transparent: true,
             opacity: 0
@@ -133,22 +182,30 @@ function init3DDeviceTwin(containerId) {
         scene.add(nodeGroup);
         deviceNode = nodeGroup;
 
-        // Damped OrbitControls Ambient Rotation
+        // Damped OrbitControls & Animation Loop
         let angle = 0;
         function animate3D() {
             requestAnimationFrame(animate3D);
 
-            // Ambient gentle rotation
+            // Ambient gentle tilt
             angle += 0.005;
-            deviceNode.rotation.y = Math.sin(angle * 0.8) * 0.25;
-            deviceNode.rotation.x = Math.cos(angle * 0.5) * 0.08;
+            deviceNode.rotation.y = Math.sin(angle * 0.8) * 0.2;
+            deviceNode.rotation.x = Math.cos(angle * 0.5) * 0.06;
+
+            // DC Motor Rotor Animation: spins continuously if motor_status === "RUNNING"
+            if (motorRotor) {
+                const motorStatus = (window.ZGUARD_STATE && window.ZGUARD_STATE.live) ? window.ZGUARD_STATE.live.motor_status : "STOPPED";
+                if (motorStatus === "RUNNING") {
+                    motorRotor.rotation.y += 0.15;
+                }
+            }
 
             // Pulse ring opacity
             if (ringMesh) {
                 ringMesh.material.opacity = 0.5 + Math.sin(Date.now() * 0.003) * 0.35;
             }
 
-            // Handle particle burst animation on security event
+            // Handle particle burst animation
             if (isParticleBurstActive) {
                 burstTimer += 0.05;
                 const pos = particleSystem.geometry.attributes.position.array;
@@ -165,7 +222,6 @@ function init3DDeviceTwin(containerId) {
                 if (burstTimer >= 2) {
                     isParticleBurstActive = false;
                     particleSystem.material.opacity = 0;
-                    // Reset particle positions
                     for (let i = 0; i < particleCount; i++) {
                         pos[i * 3] = (Math.random() - 0.5) * 2;
                         pos[i * 3 + 1] = Math.random() * 2;
@@ -211,11 +267,11 @@ window.triggerSecurityParticleBurst = function() {
 function update3DRiskScore(riskScore) {
     if (!ringMesh) return;
     if (riskScore > 60) {
-        ringMesh.material.color.setHex(0xf43f5e); // Red (Critical)
+        ringMesh.material.color.setHex(0xdc2626); // Red (Critical)
     } else if (riskScore > 30) {
-        ringMesh.material.color.setHex(0xf59e0b); // Amber (Warning)
+        ringMesh.material.color.setHex(0xd97706); // Amber (Warning)
     } else {
-        ringMesh.material.color.setHex(0x10b981); // Green (Safe)
+        ringMesh.material.color.setHex(0x059669); // Green (Safe)
     }
 }
 

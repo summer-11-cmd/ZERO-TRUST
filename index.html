@@ -9,7 +9,7 @@
     <!-- Google Fonts: Inter & JetBrains Mono -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
     
     <link rel="stylesheet" href="styles.css">
 
@@ -21,15 +21,13 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
-    <!-- Background Canvas Mesh -->
-    <canvas id="bgCanvas"></canvas>
 
     <!-- Header Navigation -->
     <header class="site-header" id="header">
         <div class="container header-inner">
             <a href="#" class="brand-logo">
                 <div class="logo-icon">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
                         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
                         <path d="m9 12 2 2 4-4"></path>
                     </svg>
@@ -49,13 +47,14 @@
             </nav>
 
             <div class="header-actions">
+                <button class="btn btn-glass" id="btnOpenSettings">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                    <span>Settings</span>
+                </button>
                 <div class="badge-pill" id="globalStatusPill">
                     <span class="pulse-dot" id="statusPulseDot"></span> 
                     <span id="connectionStatusText">Waiting for ESP32-01 connection...</span>
                 </div>
-                <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle Navigation">
-                    <span></span><span></span><span></span>
-                </button>
             </div>
         </div>
     </header>
@@ -66,43 +65,49 @@
         <section class="tab-pane active" id="tab-overview">
             <div class="overview-header-row">
                 <h1 class="page-title">System Status & Digital Twin</h1>
-                <span class="device-target-tag">Target Device: <strong id="targetDeviceTag">ESP32-01</strong></span>
+                <span class="device-target-tag">Target Gateway: <strong id="targetDeviceTag">ESP32-01</strong></span>
             </div>
 
             <!-- Live Computed Overview Metrics Grid -->
             <div class="overview-metrics-grid">
                 <div class="metric-card highlight-card">
                     <div class="metric-icon green">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
                     </div>
                     <div>
-                        <div class="metric-number" id="overviewHealthScore">-- %</div>
+                        <div class="metric-number" id="overviewHealthScore">0 %</div>
                         <div class="metric-title">Overall System Health</div>
-                        <p class="metric-desc">Computed live from telemetry stability & risk scores</p>
+                        <p class="metric-desc">Live status & relay contactor stability</p>
+                    </div>
+                </div>
+
+                <!-- ISI — Industrial Security Index Card -->
+                <div class="metric-card isi-card">
+                    <div class="metric-icon violet">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    </div>
+                    <div>
+                        <div class="metric-number text-violet" id="overviewIsiScore">0 %</div>
+                        <div class="metric-title">ISI — Industrial Security Index</div>
+                        <div class="isi-breakdown">
+                            <div class="isi-item"><span>Zero-Trust Auth:</span> <strong class="isi-val" id="isiAuthVal">100%</strong></div>
+                            <div class="isi-item"><span>Fault Severity:</span> <strong class="isi-val" id="isiFaultVal">Clear</strong></div>
+                        </div>
                     </div>
                 </div>
 
                 <div class="metric-card">
                     <div class="metric-icon blue">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/></svg>
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/></svg>
                     </div>
                     <div class="metric-number" id="overviewOnlineDevices">0 / 1</div>
-                    <div class="metric-title">Online Device Status</div>
-                    <p class="metric-desc">Single physical ESP32 gateway</p>
-                </div>
-
-                <div class="metric-card">
-                    <div class="metric-icon cyan">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                    </div>
-                    <div class="metric-number" id="overviewTrustedDevices">1</div>
-                    <div class="metric-title">Trusted Hardware Nodes</div>
-                    <p class="metric-desc">Zero Trust Edge Whitelist Enabled</p>
+                    <div class="metric-title">Online Gateway Status</div>
+                    <p class="metric-desc">Single physical ESP32 node</p>
                 </div>
 
                 <div class="metric-card">
                     <div class="metric-icon rose">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                     </div>
                     <div class="metric-number text-rose" id="overviewUnauthCount">0</div>
                     <div class="metric-title">Unauthorized Scans Today</div>
@@ -113,7 +118,7 @@
             <!-- 3D Digital Twin Panel -->
             <div class="twin-panel-card">
                 <div class="card-header-bar">
-                    <h3><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg> 3D Device Twin — Node ESP32-01</h3>
+                    <h3><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg> 3D Device Twin — Animated DC Motor Node</h3>
                     <span class="card-status-badge" id="twinRiskBadge">ZERO TRUST RISK: SAFE</span>
                 </div>
                 <div class="twin-body-grid">
@@ -128,14 +133,6 @@
                                 <strong class="info-val font-mono text-cyan" id="twinDevId">ESP32-01</strong>
                             </div>
                             <div class="info-item">
-                                <span class="info-label">AC Line Voltage</span>
-                                <strong class="info-val font-mono" id="twinVolts">-- V</strong>
-                            </div>
-                            <div class="info-item">
-                                <span class="info-label">Load Current</span>
-                                <strong class="info-val font-mono" id="twinCurrent">-- A</strong>
-                            </div>
-                            <div class="info-item">
                                 <span class="info-label">Industrial Relay</span>
                                 <strong class="info-val" id="twinRelay">--</strong>
                             </div>
@@ -145,7 +142,7 @@
                             </div>
                             <div class="info-item">
                                 <span class="info-label">Last Communication</span>
-                                <strong class="info-val font-mono text-dim" id="twinLastSeen">--</strong>
+                                <strong class="info-val text-dim" id="twinLastSeen">--</strong>
                             </div>
                         </div>
                     </div>
@@ -156,14 +153,14 @@
         <!-- TAB 2: DEVICE SETUP & PERSISTENT MONITORING -->
         <section class="tab-pane" id="tab-device">
             <div class="overview-header-row">
-                <h1 class="page-title">Device Setup & Live Control</h1>
+                <h1 class="page-title">Device Setup & Live Telemetry</h1>
             </div>
 
             <div class="device-grid">
                 <!-- Single Add/Configure Device Slot Card -->
                 <div class="card-panel">
                     <div class="card-header-bar">
-                        <h3><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1222s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Firebase Device Connection Setup</h3>
+                        <h3><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Firebase Connection Setup</h3>
                     </div>
 
                     <p class="panel-desc">Configure your Firebase Realtime Database credentials to connect ZGuard directly to your physical ESP32 gateway.</p>
@@ -191,37 +188,25 @@
                             </div>
                         </div>
 
-                        <button type="submit" class="btn btn-primary btn-block">
+                        <button type="submit" class="btn btn-primary btn-block margin-top-2">
                             <span>Save Credentials & Connect</span>
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
                         </button>
                     </form>
                 </div>
 
-                <!-- Persistent Device Monitoring & Emergency Control Panel -->
+                <!-- Persistent Device Monitoring Panel -->
                 <div class="card-panel">
                     <div class="card-header-bar">
-                        <h3><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg> Live Device Control Panel</h3>
+                        <h3><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg> Live Device Monitoring</h3>
                         <span class="connection-state-indicator" id="monConnIndicator">Waiting for ESP32-01 connection...</span>
                     </div>
 
                     <div class="monitoring-metrics-grid">
                         <div class="mini-mon-card">
-                            <span class="mini-label">Voltage Reading</span>
-                            <span class="mini-value text-cyan" id="monVoltage">-- V</span>
-                            <span class="mini-sub">AC Line Monitor</span>
-                        </div>
-
-                        <div class="mini-mon-card">
-                            <span class="mini-label">Current Load</span>
-                            <span class="mini-value text-cyan" id="monCurrent">-- A</span>
-                            <span class="mini-sub">Shunt Sensor</span>
-                        </div>
-
-                        <div class="mini-mon-card">
-                            <span class="mini-label">Relay State</span>
+                            <span class="mini-label">Relay Contact State</span>
                             <span class="mini-value" id="monRelay">--</span>
-                            <span class="mini-sub">Hardware Contact</span>
+                            <span class="mini-sub">Hardware Interlock</span>
                         </div>
 
                         <div class="mini-mon-card">
@@ -229,22 +214,11 @@
                             <span class="mini-value" id="monMotor">--</span>
                             <span class="mini-sub">Drive Circuit</span>
                         </div>
-                    </div>
 
-                    <div class="command-box">
-                        <h4>Hardware Remote Control</h4>
-                        <p class="text-muted">Pushes hardware execution commands to `/devices/ESP32-01/commands/latest`.</p>
-
-                        <div class="command-buttons-row">
-                            <button class="btn btn-danger btn-lg" id="btnCutRelayMain">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
-                                <span>DISABLE RELAY (CUT)</span>
-                            </button>
-
-                            <button class="btn btn-success btn-lg" id="btnEnableRelayMain">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-                                <span>ENABLE RELAY (RESET)</span>
-                            </button>
+                        <div class="mini-mon-card">
+                            <span class="mini-label">Last Communication</span>
+                            <span class="mini-value text-dim" id="monLastSeen" style="font-size: 1.05rem; padding-top: 4px;">--</span>
+                            <span class="mini-sub">Server Heartbeat</span>
                         </div>
                     </div>
                 </div>
@@ -289,7 +263,7 @@
                                 <th>Card UID</th>
                                 <th>User Name</th>
                                 <th>Zero Trust Status</th>
-                                <th>Device ID</th>
+                                <th class="text-right">Device ID</th>
                             </tr>
                         </thead>
                         <tbody id="rfidTableBody">
@@ -308,40 +282,31 @@
             </div>
 
             <div class="faults-grid">
-                <div class="fault-card" id="faultVoltageCard">
+                <div class="fault-card" id="faultRelayCard">
                     <div class="fault-icon blue">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
                     </div>
-                    <h3>AC Voltage Stability</h3>
-                    <div class="fault-status" id="faultVoltageStatus">Normal (220V Baseline)</div>
-                    <p class="fault-desc">Threshold: 205V – 245V. Alarms trigger on persistent overvoltage.</p>
-                </div>
-
-                <div class="fault-card" id="faultCurrentCard">
-                    <div class="fault-icon cyan">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                    </div>
-                    <h3>Current Load Monitor</h3>
-                    <div class="fault-status" id="faultCurrentStatus">Normal (&lt; 7.0A)</div>
-                    <p class="fault-desc">Threshold: 7.0A max. Prevents industrial motor overload burnout.</p>
+                    <h3>Relay Circuit Interlock</h3>
+                    <div class="fault-status" id="faultRelayStatus">Normal (Relay Closed)</div>
+                    <p class="fault-desc">Monitors industrial relay contactor state.</p>
                 </div>
 
                 <div class="fault-card" id="faultRfidBurstCard">
                     <div class="fault-icon rose">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                     </div>
-                    <h3>Zero Trust RFID Burst Detection</h3>
+                    <h3>Zero Trust RFID Tamper Burst</h3>
                     <div class="fault-status" id="faultRfidBurstStatus">Clear (0 Bursts)</div>
                     <p class="fault-desc">Triggers when ≥ 3 unauthorized RFID scans occur within 60s.</p>
                 </div>
 
                 <div class="fault-card" id="faultOfflineCard">
                     <div class="fault-icon amber">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                     </div>
                     <h3>Heartbeat & Communication</h3>
                     <div class="fault-status" id="faultOfflineStatus">Waiting for Connection</div>
-                    <p class="fault-desc">Triggers if `last_seen` timestamp is older than 10 seconds.</p>
+                    <p class="fault-desc">Triggers if gateway communication is stale (> 10s).</p>
                 </div>
             </div>
         </section>
@@ -353,11 +318,11 @@
             </div>
 
             <div class="ai-grid">
-                <!-- Security Agent Panel -->
+                <!-- Security Agent Panel (Advisory Only) -->
                 <div class="card-panel">
                     <div class="card-header-bar">
                         <h3><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Zero Trust Security Agent</h3>
-                        <span class="agent-tag violet">LLM SECURITY WATCHER</span>
+                        <span class="agent-tag violet">ADVISORY LLM WATCHER</span>
                     </div>
 
                     <div class="agent-score-box">
@@ -367,12 +332,12 @@
 
                     <div class="agent-output-box">
                         <span class="agent-out-lbl">Reasoning Summary</span>
-                        <p class="agent-out-text" id="aiSecurityReason">Waiting for backend security event analysis...</p>
+                        <p class="agent-out-text" id="aiSecurityReason">AI analysis not configured — add API key in Settings</p>
                     </div>
 
                     <div class="agent-output-box">
-                        <span class="agent-out-lbl">Recommended Action</span>
-                        <p class="agent-out-text text-cyan" id="aiSecurityRec">No lockdown active.</p>
+                        <span class="agent-out-lbl">Advisory Recommendation</span>
+                        <p class="agent-out-text text-cyan" id="aiSecurityRec">Configure API key to enable advisory threat synthesis.</p>
                     </div>
                 </div>
 
@@ -380,17 +345,17 @@
                 <div class="card-panel">
                     <div class="card-header-bar">
                         <h3><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.9 6.91a2.12 2.12 0 0 1-3-3l6.91-6.9a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> Predictive Maintenance Agent</h3>
-                        <span class="agent-tag teal">TREND WATCHER</span>
+                        <span class="agent-tag teal">MOTOR & RELAY WATCHER</span>
                     </div>
 
                     <div class="agent-score-box">
                         <span class="agent-score-lbl">Hardware Health Prediction</span>
-                        <div class="agent-score-val text-emerald" id="aiPmConfidence">Healthy (100% Conf)</div>
+                        <div class="agent-score-val text-emerald" id="aiPmConfidence">Healthy</div>
                     </div>
 
                     <div class="agent-output-box">
-                        <span class="agent-out-lbl">Telemetry Trend Findings</span>
-                        <p class="agent-out-text" id="aiPmSummary">Voltage and current trends within normal industrial operating limits.</p>
+                        <span class="agent-out-lbl">Motor Runtime & Relay Frequency Findings</span>
+                        <p class="agent-out-text" id="aiPmSummary">AI analysis not configured — add API key in Settings</p>
                     </div>
                 </div>
             </div>
@@ -409,19 +374,39 @@
 
     </main>
 
+    <!-- Settings Modal Dialog -->
+    <div class="modal-overlay" id="settingsModal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 class="modal-title">Backend Configuration</h3>
+                <button class="modal-close" id="btnCloseSettings">&times;</button>
+            </div>
+            <p class="panel-desc">Enter your OpenAI or LLM API Key to update the Python backend server environment (`.env`). The key is sent securely server-side and is never stored in your browser.</p>
+            <form id="settingsForm">
+                <div class="form-group">
+                    <label for="inputLlmApiKey">LLM API Key *</label>
+                    <input type="password" id="inputLlmApiKey" required placeholder="sk-proj-...">
+                </div>
+                <button type="submit" class="btn btn-primary btn-block margin-top-2">
+                    <span>Save Key & Hot-Reload Backend</span>
+                </button>
+            </form>
+        </div>
+    </div>
+
     <!-- Footer -->
     <footer class="site-footer">
         <div class="container footer-inner-simple">
             <div class="brand-logo">
-                <div class="logo-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+                <div class="logo-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
                 <span class="brand-name">ZGUARD</span>
             </div>
-            <span class="footer-desc">Single-Device Industrial IoT Security Monitor — Device ID: <strong id="footerDevId">ESP32-01</strong></span>
+            <span class="footer-desc">Single-Device Industrial IoT Security Monitor — Gateway: <strong id="footerDevId" class="font-mono">ESP32-01</strong></span>
             <span class="copyright">© 2026 ZGuard Inc. All rights reserved.</span>
         </div>
     </footer>
 
-    <!-- Application Script Engine -->
+    <!-- Application Scripts -->
     <script src="firebase-config.js"></script>
     <script src="device-twin-3d.js"></script>
     <script src="app.js"></script>

@@ -2,8 +2,9 @@
 ZGuard Python AI Security & Threat Analysis Watcher Service
 - Single physical device watcher (/devices/{id})
 - Listens to real-time Firebase telemetry and RFID audit logs
-- Triggers LLM security analysis on unauthorized RFID burst windows
-- Evaluates voltage, current, relay, and heartbeat status thresholds
+- Evaluates relay interlocks and heartbeat status thresholds
+- Provides advisory LLM threat synthesis on unauthorized RFID burst windows
+- Serves protected local HTTP config API on http://localhost:5000 to hot-reload LLM API key in .env
 - Dispatches SMTP Email and optional Twilio SMS alerts matching format:
   ⚠️ ALERT
   {event_type}
@@ -19,6 +20,7 @@ import smtplib
 from email.mime.text import MIMEText
 from datetime import datetime
 import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
 import firebase_admin
 from firebase_admin import credentials, db
@@ -49,7 +51,6 @@ ALERT_SMS_TO = os.getenv("ALERT_SMS_TO", "")
 device_unauth_scans = {}  # { device_id: [timestamps] }
 last_alert_time = {}      # { f"{device_id}_{event_type}": timestamp }
 
-# Cooldown window in seconds per event type
 ALERT_COOLDOWN_SEC = 60
 
 def init_firebase():
@@ -60,12 +61,104 @@ def init_firebase():
             firebase_admin.initialize_app(cred, {'databaseURL': FIREBASE_DB_URL})
             print(f"[ZGuard Backend] Firebase Admin SDK initialized with {FIREBASE_SERVICE_ACCOUNT_PATH}")
         else:
-            print(f"[ZGuard Backend] Note: '{FIREBASE_SERVICE_ACCOUNT_PATH}' not present. Using default DB URL listener if unauthenticated or public RTDB.")
+            print(f"[ZGuard Backend] Note: '{FIREBASE_SERVICE_ACCOUNT_PATH}' not present. Using default DB URL listener.")
             firebase_admin.initialize_app(options={'databaseURL': FIREBASE_DB_URL})
+
+def update_env_llm_key(new_key):
+    """Updates or appends LLM_API_KEY in the backend .env file"""
+    global LLM_API_KEY
+    LLM_API_KEY = new_key.strip()
+    
+    env_path = os.path.join(os.path.dirname(__file__), ".env")
+    lines = []
+    found = False
+    
+    if os.path.exists(env_path):
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("LLM_API_KEY="):
+                    lines.append(f"LLM_API_KEY={LLM_API_KEY}\n")
+                    found = True
+                else:
+                    lines.append(line)
+    
+    if not found:
+        lines.append(f"\nLLM_API_KEY={LLM_API_KEY}\n")
+        
+    with open(env_path, "w", encoding="utf-8") as f:
+        f.writelines(lines)
+        
+    print(f"[ZGuard Backend] Hot-reloaded LLM_API_KEY in .env file (Length: {len(LLM_API_KEY)})")
+
+# --- Local Protected HTTP Config API Handler ---
+class ConfigApiHandler(BaseHTTPRequestHandler):
+    def _send_cors_headers(self):
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self._send_cors_headers()
+        self.end_headers()
+
+    def do_GET(self):
+        if self.path == "/api/config/status":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self._send_cors_headers()
+            self.end_headers()
+            payload = json.dumps({"llm_configured": bool(LLM_API_KEY.strip())})
+            self.wfile.write(payload.encode("utf-8"))
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+    def do_POST(self):
+        if self.path == "/api/config/llm-key":
+            content_length = int(self.headers.get("Content-Length", 0))
+            post_data = self.rfile.read(content_length)
+            try:
+                data = json.loads(post_data.decode("utf-8"))
+                api_key = data.get("api_key", "").strip()
+                if api_key:
+                    update_env_llm_key(api_key)
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self._send_cors_headers()
+                    self.end_headers()
+                    res = json.dumps({"status": "success", "configured": True})
+                    self.wfile.write(res.encode("utf-8"))
+                else:
+                    self.send_response(400)
+                    self._send_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(b'{"status": "error", "message": "API key cannot be empty"}')
+            except Exception as e:
+                self.send_response(500)
+                self._send_cors_headers()
+                self.end_headers()
+                res = json.dumps({"status": "error", "message": str(e)})
+                self.wfile.write(res.encode("utf-8"))
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+    def log_message(self, format, *args):
+        return # Silent HTTP logging
+
+def start_config_api_server():
+    """Runs lightweight local HTTP config API server on localhost:5000"""
+    try:
+        server = HTTPServer(("localhost", 5000), ConfigApiHandler)
+        print("[ZGuard Backend API] Local Config Server running on http://localhost:5000")
+        server.serve_forever()
+    except Exception as err:
+        print(f"[ZGuard Backend API Error] {err}")
 
 def call_llm_security_analysis(device_id, recent_scans):
     """
-    Calls LLM API for security incident evaluation.
+    Calls LLM API for advisory security incident evaluation.
     Wrapped in try/except with a safe rule-based fallback.
     """
     try:
@@ -84,7 +177,7 @@ def call_llm_security_analysis(device_id, recent_scans):
                 return {
                     "risk_score": parsed.get("risk_score", 85),
                     "reason": parsed.get("reason", "Multiple unauthorized RFID burst scans detected."),
-                    "recommendation": parsed.get("recommendation", "Lock down hardware relay immediately.")
+                    "recommendation": parsed.get("recommendation", "Advisory: Inspect edge gateway card reader.")
                 }
     except Exception as e:
         print(f"[ZGuard LLM Fallback] {e}")
@@ -95,7 +188,7 @@ def call_llm_security_analysis(device_id, recent_scans):
     return {
         "risk_score": risk,
         "reason": f"Zero Trust Violation: {scan_count} unauthorized RFID access attempts within 60 seconds.",
-        "recommendation": "Execute DISABLE_RELAY command and notify site security lead."
+        "recommendation": "Advisory: Notify site security lead to verify operator credentials."
     }
 
 def send_critical_alert(device_id, event_type, action_taken):
@@ -159,7 +252,7 @@ Time: {formatted_time}
             print(f"[Twilio SMS Error] {err}")
 
 def monitor_live_telemetry_loop():
-    """Continuous background loop evaluating live telemetry thresholds for alerts"""
+    """Continuous background loop evaluating live relay state and heartbeat staleness"""
     while True:
         try:
             time.sleep(4)
@@ -171,8 +264,6 @@ def monitor_live_telemetry_loop():
                     if not live:
                         continue
 
-                    voltage = float(live.get("voltage", 220))
-                    current = float(live.get("current", 4.0))
                     relay_status = str(live.get("relay_status", "ON")).upper()
                     last_seen = live.get("last_seen", now_ms)
                     
@@ -184,22 +275,14 @@ def monitor_live_telemetry_loop():
                     else:
                         last_seen_ms = float(last_seen)
 
-                    # Trigger 1: Overvoltage (> 250V)
-                    if voltage > 250:
-                        send_critical_alert(dev_id, "Overvoltage Condition (> 250V)", f"Action: Voltage spike detected at {voltage}V. System monitoring isolation.")
-
-                    # Trigger 2: Overcurrent (> 7.0A)
-                    if current > 7.0:
-                        send_critical_alert(dev_id, "Overcurrent Load (> 7.0A)", f"Action: Overcurrent detected at {current}A. Motor drive isolation recommended.")
-
-                    # Trigger 3: Device Offline (last_seen > 10s)
+                    # Device Offline Trigger (last_seen > 10s)
                     stale_sec = (now_ms - last_seen_ms) / 1000.0
                     if stale_sec > 10:
-                        send_critical_alert(dev_id, "Device Connection Offline", f"Action: Heartbeat lost for {int(stale_sec)} seconds. Flagged offline.")
+                        send_critical_alert(dev_id, "Device Connection Offline", f"Action: Gateway heartbeat stale for {int(stale_sec)}s.")
 
-                    # Trigger 4: Relay Failure / Disabled State
+                    # Relay Cut Trigger
                     if relay_status == "OFF":
-                        send_critical_alert(dev_id, "Relay Circuit Disabled / Cut", "Action: Hardware contactor opened or emergency trip triggered.")
+                        send_critical_alert(dev_id, "Relay Circuit Open / Disabled", "Action: Hardware interlock trip logged.")
 
         except Exception as err:
             print(f"[Telemetry Loop Error] {err}")
@@ -228,8 +311,7 @@ def handle_rfid_event(event):
             scan_count = len(device_unauth_scans[device_id])
             print(f"[ZGuard Watcher] Unauthorized RFID scan on {device_id} (Scan #{scan_count} in 60s)")
 
-            # Trigger 5: Unauthorized RFID attempt (Immediate alert + burst evaluation)
-            action_str = f"Action: Unauthorized card scan (UID: {uid}). "
+            action_str = f"Action: Unauthorized card scan (UID: {uid}). Advisory risk logged."
             if scan_count >= 3:
                 analysis = call_llm_security_analysis(device_id, device_unauth_scans[device_id])
                 
@@ -255,11 +337,7 @@ def handle_rfid_event(event):
                 db.reference(f"/devices/{device_id}/security_events").push(sec_event)
                 db.reference(f"/devices/{device_id}/ai_incidents").push(ai_incident)
 
-                if analysis["risk_score"] > 70:
-                    cmd_payload = {"cmd": "DISABLE_RELAY", "issued_at": {".sv": "timestamp"}}
-                    db.reference(f"/devices/{device_id}/commands/latest").set(cmd_payload)
-                    action_str += "Automatic DISABLE_RELAY command dispatched."
-
+                # Advisory output only — no remote command actuation
                 send_critical_alert(device_id, "Unauthorized RFID Burst Scan", action_str)
                 device_unauth_scans[device_id] = []
             else:
@@ -269,9 +347,13 @@ def handle_rfid_event(event):
         print(f"[ZGuard Watcher Error] {e}")
 
 def start_watcher():
-    """Start listening to Firebase streams and background loops"""
+    """Start listening to Firebase streams and local config API server"""
     init_firebase()
     print("[ZGuard Watcher Service] Started live monitoring on /devices...")
+
+    # Start local Config API server thread
+    api_thread = threading.Thread(target=start_config_api_server, daemon=True)
+    api_thread.start()
 
     # Start live telemetry loop thread
     telem_thread = threading.Thread(target=monitor_live_telemetry_loop, daemon=True)

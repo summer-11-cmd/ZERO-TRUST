@@ -1,6 +1,6 @@
 # ZGuard — Single-Device Industrial IoT Zero Trust Security Dashboard
 
-ZGuard is an industrial-grade Zero Trust security monitoring platform for single physical IoT/IIoT devices (e.g., ESP32 hardware gateways). It provides real-time telemetry inspection, 3D digital twin visualization, zero-trust RFID access logging, threshold fault detection, and automated AI threat analysis.
+ZGuard is a light, professional, industrial-grade Zero Trust security monitoring platform for single physical IoT/IIoT devices (e.g., ESP32 hardware gateways). It provides real-time telemetry inspection, animated 3D digital twin visualization, an Industrial Security Index (ISI) score, zero-trust RFID access logging, threshold fault detection, and advisory AI threat analysis.
 
 ![ZGuard Topology](zguard_hero_network.jpg)
 
@@ -8,11 +8,13 @@ ZGuard is an industrial-grade Zero Trust security monitoring platform for single
 
 ## 🌟 Key Architecture & Scope
 
-- **Single Physical Device Scope**: Dedicated monitoring and remote control for exactly one hardware gateway (`ESP32-01`).
+- **Single Physical Device Scope**: Dedicated monitoring for exactly one hardware gateway (`ESP32-01`).
+- **Clean Professional Light Theme**: Built with white/slate card systems, Inter typography, left-aligned card metrics, right-aligned numerical table columns, and restrained semantic status colors.
+- **Industrial Security Index (ISI)**: Prominent 0–100% composite score card evaluating zero-trust authorization ratio and active fault severity.
+- **3D Digital Twin with Animated DC Motor**: Built with Three.js rendering an isometric board representation with a DC Motor rotor that spins continuously while `motor_status === "RUNNING"` and stays stationary when `"STOPPED"`.
 - **Firebase Realtime Database as Live Data Layer**: Direct client-side reading using Firebase Web SDK — no custom WebSocket or SQL server required.
-- **3D Digital Twin**: Built with Three.js rendering an isometric node representation with dynamic risk glow rings (Green = Healthy, Amber = Warning, Red = Critical) and particle tamper burst animations.
-- **Zero Trust Edge Enforcement**: ESP32 checks RFID scans against a local hardware whitelist before pushing audit logs to Firebase.
-- **Autonomous AI Watcher Service**: Python backend (`backend/main.py`) watches RFID log streams for unauthorized bursts (≥3 scans in 60s), invokes LLM analysis, dispatches sub-second `DISABLE_RELAY` commands, and sends debounced Email/SMS notifications.
+- **Backend API Key Management**: Built-in Settings modal allowing operators to enter an LLM API Key, which is sent securely to a local Python API endpoint (`http://localhost:5000/api/config/llm-key`) to update the server-side `.env` file and hot-reload in memory.
+- **Advisory AI Threat Watcher**: Python backend (`backend/main.py`) watches RFID log streams for unauthorized bursts (≥3 scans in 60s), invokes LLM analysis, and dispatches debounced Email/SMS notifications.
 
 ---
 
@@ -20,11 +22,11 @@ ZGuard is an industrial-grade Zero Trust security monitoring platform for single
 
 ```
 ZERO-TRUST/
-├── index.html                   # Dashboard UI shell & live tab panels
-├── styles.css                   # Cyber-security dark theme & 3D panel styling
-├── app.js                       # Dashboard UI controller & tab navigation
+├── index.html                   # Dashboard UI shell & live tab panels (Light Theme)
+├── styles.css                   # Professional light industrial CSS styling
+├── app.js                       # Dashboard UI controller, ISI score rendering, settings modal
 ├── firebase-config.js           # Firebase RTDB Web SDK client & state bus
-├── device-twin-3d.js            # Three.js 3D Device Twin component
+├── device-twin-3d.js            # Three.js 3D Device Twin component with DC Motor animation
 ├── zguard_hero_network.jpg      # Network topology graphic
 ├── firmware/
 │   ├── platformio.ini           # PlatformIO project configuration
@@ -33,8 +35,8 @@ ZERO-TRUST/
 │   └── src/
 │       └── main.cpp             # ESP32 C++ firmware source
 └── backend/
-    ├── main.py                  # Python AI watcher service & LLM threat engine
-    ├── requirements.txt         # Python dependencies (firebase-admin, requests, etc.)
+    ├── main.py                  # Python AI watcher service & HTTP config API server
+    ├── requirements.txt         # Python dependencies
     └── .env.example             # Backend environment credentials template
 ```
 
@@ -45,14 +47,14 @@ ZERO-TRUST/
 ### 1. Dashboard Web UI Setup
 
 1. Open `index.html` in any standard web browser (or serve via any static web server).
-2. Click on the **Device Setup & Control** tab.
+2. Click on the **Device Setup & Live Telemetry** tab.
 3. Enter your Firebase project credentials:
    - **Firebase API Key**
    - **Database URL** (e.g., `https://your-project-default-rtdb.firebaseio.com`)
    - **Project ID**
    - **Device ID** (default: `ESP32-01`)
 4. Click **Save Credentials & Connect**. Credentials are stored locally in your browser (`localStorage`).
-5. The dashboard will automatically connect and listen to real-time streams at `/devices/ESP32-01/live`, `/rfid_log`, `/security_events`, `/ai_incidents`, and `/commands/latest`.
+5. Click **Settings** in the header to enter your OpenAI LLM API Key for real-time AI security analysis.
 
 ---
 
@@ -66,12 +68,12 @@ ZERO-TRUST/
    #define FIREBASE_API_KEY "YOUR_FIREBASE_API_KEY"
    #define FIREBASE_DATABASE_URL "https://your-project-default-rtdb.firebaseio.com"
    ```
-3. Connect your ESP32 hardware (MFRC522 RFID on SPI pins, Relay on GPIO 26, Motor Drive on GPIO 27, ADC sensors on pins 34 & 35).
+3. Connect your ESP32 hardware (MFRC522 RFID on SPI pins, Relay on GPIO 26, Motor Drive on GPIO 27).
 4. Build and flash the firmware using PlatformIO or Arduino IDE with the `mobizt/Firebase-ESP-Client` library.
 
 ---
 
-### 3. Python AI Security Watcher Service
+### 3. Python AI Security Watcher & Config Server
 
 1. Navigate to the `backend/` directory:
    ```bash
@@ -90,8 +92,7 @@ ZERO-TRUST/
    SMTP_PASS=your_app_password
    ALERT_EMAIL_TO=ciso@company.com
    ```
-4. Place your Firebase Admin Service Account JSON file as `serviceAccountKey.json` in the `backend/` directory.
-5. Run the watcher service:
+4. Run the watcher service and API server:
    ```bash
    python main.py
    ```
@@ -102,8 +103,6 @@ ZERO-TRUST/
 
 ```
 /devices/{device_id}/live
-    voltage: number
-    current: number
     relay_status: "ON" | "OFF"
     motor_status: "RUNNING" | "STOPPED"
     rfid_last_uid: string
@@ -118,7 +117,7 @@ ZERO-TRUST/
     timestamp: timestamp
 
 /devices/{device_id}/security_events/{push_id}
-    type: "unauthorized_rfid_burst" | "voltage_fault" | "device_offline"
+    type: "unauthorized_rfid_burst" | "device_offline"
     severity: "warning" | "critical"
     risk_score: number
     reason: string
@@ -129,10 +128,6 @@ ZERO-TRUST/
     agent: "security" | "predictive_maintenance"
     payload: object
     timestamp: timestamp
-
-/devices/{device_id}/commands/latest
-    cmd: "DISABLE_RELAY" | "ENABLE_RELAY"
-    issued_at: timestamp
 ```
 
 ---

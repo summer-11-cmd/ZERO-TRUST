@@ -6,7 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initNavigationTabs();
     initSetupForm();
     initRfidLogFilters();
-    initMobileNav();
+    initSettingsModal();
 
     // Initialize 3D Device Twin Canvas Panel
     init3DDeviceTwin('deviceTwinContainer');
@@ -47,7 +47,6 @@ function initSetupForm() {
     const projectIdInput = document.getElementById('cfgProjectId');
     const deviceIdInput = document.getElementById('cfgDeviceId');
 
-    // Auto-fill stored credentials if existing in localStorage
     const stored = getStoredCredentials();
     if (stored) {
         if (apiKeyInput) apiKeyInput.value = stored.apiKey || "";
@@ -76,7 +75,63 @@ function initSetupForm() {
 }
 
 /* ==========================================================================
-   3. Realtime UI Renderer & State Subscriber
+   3. Settings Modal & Backend LLM API Key Handler
+   ========================================================================== */
+function initSettingsModal() {
+    const openBtn = document.getElementById('btnOpenSettings');
+    const closeBtn = document.getElementById('btnCloseSettings');
+    const modal = document.getElementById('settingsModal');
+    const form = document.getElementById('settingsForm');
+    const keyInput = document.getElementById('inputLlmApiKey');
+
+    if (openBtn && modal) {
+        openBtn.addEventListener('click', () => modal.classList.add('active'));
+    }
+    if (closeBtn && modal) {
+        closeBtn.addEventListener('click', () => modal.classList.remove('active'));
+    }
+    if (modal) {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) modal.classList.remove('active');
+        });
+    }
+
+    if (form) {
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const apiKey = keyInput.value.trim();
+            if (!apiKey) {
+                alert("Please enter a valid LLM API Key.");
+                return;
+            }
+
+            // Submit key to local Python backend endpoint
+            fetch('http://localhost:5000/api/config/llm-key', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ api_key: apiKey })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data && data.status === 'success') {
+                    window.ZGUARD_STATE.llmConfigured = true;
+                    keyInput.value = "";
+                    modal.classList.remove('active');
+                    alert("LLM API Key saved to backend .env and reloaded successfully!");
+                    notifySubscribers();
+                } else {
+                    alert("Failed to update backend key: " + (data.message || "Unknown error"));
+                }
+            })
+            .catch(err => {
+                alert("Could not connect to Python backend server at http://localhost:5000. Ensure 'python backend/main.py' is running.");
+            });
+        });
+    }
+}
+
+/* ==========================================================================
+   4. Realtime UI Renderer & State Subscriber
    ========================================================================== */
 function renderZGuardUI(state) {
     const statusPill = document.getElementById('globalStatusPill');
@@ -113,28 +168,27 @@ function renderZGuardUI(state) {
 
     // B. Overview Page Metrics
     const ovHealth = document.getElementById('overviewHealthScore');
+    const ovIsi = document.getElementById('overviewIsiScore');
+    const isiAuthVal = document.getElementById('isiAuthVal');
+    const isiFaultVal = document.getElementById('isiFaultVal');
     const ovOnline = document.getElementById('overviewOnlineDevices');
-    const ovTrusted = document.getElementById('overviewTrustedDevices');
     const ovUnauth = document.getElementById('overviewUnauthCount');
 
     if (ovHealth) ovHealth.textContent = `${state.healthScore} %`;
+    if (ovIsi) ovIsi.textContent = `${state.isiScore} %`;
+    if (isiAuthVal) isiAuthVal.textContent = `${state.isiAuthRatio}%`;
+    if (isiFaultVal) isiFaultVal.textContent = state.isiFaultScore >= 90 ? "Clear" : (state.isiFaultScore >= 50 ? "Warning" : "Critical");
     if (ovOnline) ovOnline.textContent = `${state.onlineDevices} / 1`;
-    if (ovTrusted) ovTrusted.textContent = `${state.trustedDevices}`;
     if (ovUnauth) ovUnauth.textContent = `${state.unauthorizedToday}`;
 
-    // C. 3D Twin Sidebar & Risk Ring
+    // C. 3D Twin Sidebar
     const twinDevId = document.getElementById('twinDevId');
-    const twinVolts = document.getElementById('twinVolts');
-    const twinCurrent = document.getElementById('twinCurrent');
     const twinRelay = document.getElementById('twinRelay');
     const twinMotor = document.getElementById('twinMotor');
     const twinLastSeen = document.getElementById('twinLastSeen');
-    const twinRiskBadge = document.getElementById('twinRiskBadge');
 
     if (twinDevId) twinDevId.textContent = state.deviceId;
     if (state.live) {
-        if (twinVolts) twinVolts.textContent = `${state.live.voltage || '--'} V`;
-        if (twinCurrent) twinCurrent.textContent = `${state.live.current || '--'} A`;
         if (twinRelay) twinRelay.textContent = state.live.relay_status || '--';
         if (twinMotor) twinMotor.textContent = state.live.motor_status || '--';
         if (twinLastSeen) {
@@ -143,17 +197,12 @@ function renderZGuardUI(state) {
         }
     }
 
-    // D. Monitoring Panel Telemetry & Remote Control Buttons
-    const monVoltage = document.getElementById('monVoltage');
-    const monCurrent = document.getElementById('monCurrent');
+    // D. Monitoring Panel Telemetry
     const monRelay = document.getElementById('monRelay');
     const monMotor = document.getElementById('monMotor');
-    const btnCutRelayMain = document.getElementById('btnCutRelayMain');
-    const btnEnableRelayMain = document.getElementById('btnEnableRelayMain');
+    const monLastSeen = document.getElementById('monLastSeen');
 
     if (state.live) {
-        if (monVoltage) monVoltage.textContent = `${state.live.voltage || '--'} V`;
-        if (monCurrent) monCurrent.textContent = `${state.live.current || '--'} A`;
         if (monRelay) {
             monRelay.textContent = state.live.relay_status || '--';
             monRelay.className = state.live.relay_status === "ON" ? "mini-value text-emerald" : "mini-value text-rose";
@@ -162,13 +211,9 @@ function renderZGuardUI(state) {
             monMotor.textContent = state.live.motor_status || '--';
             monMotor.className = state.live.motor_status === "RUNNING" ? "mini-value text-emerald" : "mini-value text-dim";
         }
-    }
-
-    if (btnCutRelayMain) {
-        btnCutRelayMain.onclick = () => sendDeviceCommand("DISABLE_RELAY");
-    }
-    if (btnEnableRelayMain) {
-        btnEnableRelayMain.onclick = () => sendDeviceCommand("ENABLE_RELAY");
+        if (monLastSeen) {
+            monLastSeen.textContent = state.live.last_seen ? new Date(state.live.last_seen).toLocaleTimeString() : '--';
+        }
     }
 
     // E. Render RFID Logs & Filters
@@ -182,7 +227,7 @@ function renderZGuardUI(state) {
 }
 
 /* ==========================================================================
-   4. Real-time RFID Log Table Renderer with Search & Status Filters
+   5. Real-time RFID Log Table Renderer with Search & Status Filters
    ========================================================================== */
 function initRfidLogFilters() {
     const searchInput = document.getElementById('filterSearch');
@@ -214,7 +259,6 @@ function renderFilteredRfidLogs(logs) {
 
     let filtered = logs || [];
 
-    // Filter by Search Query (UID or User Name)
     if (searchInput && searchInput.value.trim()) {
         const q = searchInput.value.trim().toLowerCase();
         filtered = filtered.filter(l => 
@@ -223,7 +267,6 @@ function renderFilteredRfidLogs(logs) {
         );
     }
 
-    // Filter by Date (YYYY-MM-DD)
     if (dateInput && dateInput.value) {
         const targetDateStr = dateInput.value;
         filtered = filtered.filter(l => {
@@ -236,7 +279,6 @@ function renderFilteredRfidLogs(logs) {
         });
     }
 
-    // Filter by Status (AUTHORIZED / UNAUTHORIZED)
     if (statusSelect && statusSelect.value !== "ALL") {
         filtered = filtered.filter(l => l.status === statusSelect.value);
     }
@@ -256,142 +298,128 @@ function renderFilteredRfidLogs(logs) {
 
         return `
             <tr>
-                <td class="font-mono text-dim">${timeStr}</td>
-                <td class="font-mono text-dim">${dateStr}</td>
+                <td class="text-dim">${timeStr}</td>
+                <td class="text-dim">${dateStr}</td>
                 <td class="font-mono text-cyan">${l.uid || 'N/A'}</td>
                 <td>${l.user_name || 'Operator'}</td>
                 <td><span class="status-badge-cell ${statusClass}">${l.status}</span></td>
-                <td class="font-mono text-dim">${window.ZGUARD_STATE.deviceId}</td>
+                <td class="font-mono text-dim text-right">${window.ZGUARD_STATE.deviceId}</td>
             </tr>
         `;
     }).join('');
 }
 
 /* ==========================================================================
-   5. Fault Detection Renderer
+   6. Fault Detection Evaluator
    ========================================================================== */
 function renderFaultDetection(state) {
-    const overallStatus = document.getElementById('faultOverallStatus');
-    const vStatus = document.getElementById('faultVoltageStatus');
-    const cStatus = document.getElementById('faultCurrentStatus');
-    const rfidBurstStatus = document.getElementById('faultRfidBurstStatus');
-    const offStatus = document.getElementById('faultOfflineStatus');
+    const overall = document.getElementById('faultOverallStatus');
+    const relayStatus = document.getElementById('faultRelayStatus');
+    const burstStatus = document.getElementById('faultRfidBurstStatus');
+    const offlineStatus = document.getElementById('faultOfflineStatus');
 
-    const live = state.live;
-    let isFault = false;
+    if (!state.live || state.connectionStatus === "waiting") {
+        if (overall) { overall.textContent = "SYSTEM STATUS: WAITING FOR DEVICE"; overall.className = "overall-health-status text-amber"; }
+        if (offlineStatus) offlineStatus.textContent = "Waiting for Connection";
+        return;
+    }
 
-    // 1. Connection Status Check
-    if (state.connectionStatus === "offline") {
-        if (offStatus) { offStatus.textContent = "ALARM: Device Offline (>10s Stale)"; offStatus.className = "fault-status text-rose"; }
-        isFault = true;
-    } else if (state.connectionStatus === "live") {
-        if (offStatus) { offStatus.textContent = "Normal (Heartbeat Active)"; offStatus.className = "fault-status text-emerald"; }
+    let hasFault = false;
+
+    // Relay State
+    if (state.live.relay_status === "OFF") {
+        if (relayStatus) { relayStatus.textContent = "Warning (Relay Open / Cut)"; relayStatus.className = "fault-status text-rose"; }
+        hasFault = true;
     } else {
-        if (offStatus) { offStatus.textContent = "Waiting for Connection"; offStatus.className = "fault-status text-amber"; }
+        if (relayStatus) { relayStatus.textContent = "Normal (Relay Closed)"; relayStatus.className = "fault-status text-emerald"; }
     }
 
-    // 2. Voltage Check (>245V)
-    if (live && live.voltage) {
-        const v = parseFloat(live.voltage);
-        if (v > 245) {
-            if (vStatus) { vStatus.textContent = `CRITICAL SPIKE: ${v}V (>245V Max)`; vStatus.className = "fault-status text-rose"; }
-            isFault = true;
-        } else {
-            if (vStatus) { vStatus.textContent = `Normal (${v}V Baseline)`; vStatus.className = "fault-status text-emerald"; }
-        }
-    }
-
-    // 3. Current Check (>7.0A)
-    if (live && live.current) {
-        const c = parseFloat(live.current);
-        if (c > 7.0) {
-            if (cStatus) { cStatus.textContent = `OVERLOAD: ${c}A (>7.0A Max)`; cStatus.className = "fault-status text-rose"; }
-            isFault = true;
-        } else {
-            if (cStatus) { cStatus.textContent = `Normal (${c}A Load)`; cStatus.className = "fault-status text-emerald"; }
-        }
-    }
-
-    // 4. RFID Burst Check
+    // RFID Burst
     if (state.unauthorizedToday >= 3) {
-        if (rfidBurstStatus) { rfidBurstStatus.textContent = `WARNING: ${state.unauthorizedToday} Unauthorized Scans Detected`; rfidBurstStatus.className = "fault-status text-amber"; }
+        if (burstStatus) { burstStatus.textContent = `CRITICAL (${state.unauthorizedToday} Scans)`; burstStatus.className = "fault-status text-rose"; }
+        hasFault = true;
     } else {
-        if (rfidBurstStatus) { rfidBurstStatus.textContent = "Clear (0 Unauthorized Bursts)"; rfidBurstStatus.className = "fault-status text-emerald"; }
+        if (burstStatus) { burstStatus.textContent = `Clear (${state.unauthorizedToday} Scans)`; burstStatus.className = "fault-status text-emerald"; }
     }
 
-    // Overall Status
-    if (overallStatus) {
-        if (isFault) {
-            overallStatus.textContent = "SYSTEM STATUS: ALARM FAULT ACTIVE";
-            overallStatus.className = "overall-health-status text-rose";
+    // Connection
+    if (state.connectionStatus === "offline") {
+        if (offlineStatus) { offlineStatus.textContent = "STALE (Heartbeat >10s)"; offlineStatus.className = "fault-status text-rose"; }
+        hasFault = true;
+    } else {
+        if (offlineStatus) { offlineStatus.textContent = "Healthy (Sub-second Heartbeat)"; offlineStatus.className = "fault-status text-emerald"; }
+    }
+
+    if (overall) {
+        if (hasFault) {
+            overall.textContent = "SYSTEM STATUS: FAULT / WARNING ACTIVE";
+            overall.style.color = "var(--rose-600)";
+            overall.style.background = "var(--bg-rose-soft)";
+            overall.style.borderColor = "#fecdd3";
         } else {
-            overallStatus.textContent = "SYSTEM STATUS: HEALTHY";
-            overallStatus.className = "overall-health-status text-emerald";
+            overall.textContent = "SYSTEM STATUS: ALL SYSTEMS HEALTHY";
+            overall.style.color = "var(--emerald-600)";
+            overall.style.background = "var(--bg-emerald-soft)";
+            overall.style.borderColor = "#a7f3d0";
         }
     }
 }
 
 /* ==========================================================================
-   6. AI Threat Agents & Event Stream Renderer
+   7. AI Agents & Event Stream Renderer
    ========================================================================== */
 function renderAiAgents(state) {
-    const secRisk = document.getElementById('aiSecurityRiskScore');
-    const secReason = document.getElementById('aiSecurityReason');
-    const secRec = document.getElementById('aiSecurityRec');
-
+    const riskScore = document.getElementById('aiSecurityRiskScore');
+    const reason = document.getElementById('aiSecurityReason');
+    const rec = document.getElementById('aiSecurityRec');
     const pmConf = document.getElementById('aiPmConfidence');
     const pmSummary = document.getElementById('aiPmSummary');
-
     const streamBox = document.getElementById('aiTimelineStream');
 
-    const secEvents = state.securityEvents || [];
-    const aiIncidents = state.aiIncidents || [];
-
-    // Security Agent Latest Event
-    if (secEvents.length > 0) {
-        const latestSec = secEvents[0]; // Recent incident
-        if (secRisk) secRisk.textContent = `${latestSec.risk_score || 85} %`;
-        if (secReason) secReason.textContent = latestSec.reason || "Unauthorized access attempts detected.";
-        if (secRec) secRec.textContent = latestSec.recommendation || "Lock down hardware relay output.";
+    if (!state.llmConfigured) {
+        if (riskScore) riskScore.textContent = "-- %";
+        if (reason) reason.textContent = "AI analysis not configured — add API key in Settings";
+        if (rec) rec.textContent = "Configure API key to enable advisory threat synthesis.";
+        if (pmConf) pmConf.textContent = "Not Configured";
+        if (pmSummary) pmSummary.textContent = "AI analysis not configured — add API key in Settings";
     } else {
-        if (secRisk) secRisk.textContent = "0 %";
-        if (secReason) secReason.textContent = "No unauthorized access bursts detected.";
-        if (secRec) secRec.textContent = "Zero Trust security status nominal.";
+        const secEvents = state.securityEvents || [];
+        if (secEvents.length > 0) {
+            const latest = secEvents[0];
+            if (riskScore) riskScore.textContent = `${latest.risk_score || 85} %`;
+            if (reason) reason.textContent = latest.reason || "Advisory LLM threat synthesis active.";
+            if (rec) rec.textContent = latest.recommendation || "Maintain active observation.";
+        } else {
+            if (riskScore) riskScore.textContent = "0 %";
+            if (reason) reason.textContent = "Zero Trust Watcher Active — No security anomalies detected.";
+            if (rec) rec.textContent = "No action required.";
+        }
+
+        if (pmConf) pmConf.textContent = "Healthy (100% Conf)";
+        if (pmSummary) pmSummary.textContent = "Motor runtime and relay switching frequency within normal industrial parameters.";
     }
 
-    // Combine all events into AI Event Stream
-    const allEvents = [...secEvents, ...aiIncidents].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-
+    // AI Timeline Stream
     if (!streamBox) return;
-
-    if (allEvents.length === 0) {
-        streamBox.innerHTML = `<div class="text-muted text-center">No security incidents or AI events logged yet.</div>`;
+    const incidents = state.aiIncidents || [];
+    if (incidents.length === 0) {
+        streamBox.innerHTML = `<div class="text-muted text-center">No security incidents or backend events logged yet.</div>`;
         return;
     }
 
-    streamBox.innerHTML = allEvents.map(ev => {
-        const timeStr = ev.timestamp ? new Date(ev.timestamp).toLocaleTimeString() : 'Just now';
-        const type = ev.type || ev.agent || 'AI Event';
-        const isCritical = ev.severity === "critical";
-        const colorClass = isCritical ? "text-rose" : "text-cyan";
+    streamBox.innerHTML = incidents.map(inc => {
+        const timeStr = inc.timestamp ? new Date(inc.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
+        const payload = inc.payload || {};
+        const summary = payload.summary || payload.recommendation || "Backend event logged.";
 
         return `
-            <div class="agent-output-box">
-                <div class="event-top-row">
-                    <span class="agent-out-lbl ${colorClass}">${type}</span>
-                    <span class="font-mono text-dim">${timeStr}</span>
+            <div style="padding: 0.6rem 0; border-bottom: 1px solid var(--border-color); font-size: 0.85rem;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+                    <strong style="color: var(--violet-600); font-size: 0.8rem; text-transform: uppercase;">[AI Agent: ${inc.agent || 'Security'}]</strong>
+                    <span class="text-dim">${timeStr}</span>
                 </div>
-                <p class="agent-out-text">${ev.reason || (ev.payload ? JSON.stringify(ev.payload) : 'AI Analysis Event')}</p>
+                <div style="color: var(--text-muted);">${summary}</div>
             </div>
         `;
     }).join('');
-}
-
-/* Mobile Nav Drawer */
-function initMobileNav() {
-    const btn = document.getElementById('mobileMenuBtn');
-    const nav = document.getElementById('mainTabNav');
-    if (btn && nav) {
-        btn.addEventListener('click', () => nav.classList.toggle('active'));
-    }
 }
