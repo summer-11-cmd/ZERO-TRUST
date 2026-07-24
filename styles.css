@@ -505,6 +505,69 @@ body {
     position: relative;
 }
 
+.motor-video-overlay {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 230px;
+    height: 145px;
+    background: #ffffff;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: var(--shadow-md);
+    z-index: 10;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-8px);
+    transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1), transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    display: flex;
+    flex-direction: column;
+}
+
+.motor-video-overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+}
+
+.video-overlay-header {
+    background: #ffffff;
+    padding: 0.35rem 0.6rem;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.68rem;
+    font-weight: 700;
+}
+
+.video-live-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    color: var(--emerald-600);
+}
+
+.video-status-text {
+    font-size: 0.65rem;
+    color: var(--text-dim);
+}
+
+.video-iframe-wrapper {
+    flex: 1;
+    width: 100%;
+    height: 100%;
+    position: relative;
+}
+
+.video-iframe-wrapper iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    pointer-events: none;
+}
+
 .twin-info-sidebar {
     background: var(--bg-card-sub);
     border: 1px solid var(--border-color);

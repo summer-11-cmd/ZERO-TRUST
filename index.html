@@ -135,8 +135,24 @@
                     </div>
                 </div>
                 <div class="twin-body-grid">
-                    <!-- 3D Canvas Mounting Area -->
-                    <div id="deviceTwinContainer" class="twin-3d-box"></div>
+                    <!-- 3D Canvas Mounting Area with Live Motor Video Overlay -->
+                    <div id="deviceTwinContainer" class="twin-3d-box">
+                        <div class="motor-video-overlay" id="motorVideoOverlay">
+                            <div class="video-overlay-header">
+                                <span class="video-live-badge"><span class="pulse-dot"></span> MOTOR STREAM</span>
+                                <span class="video-status-text" id="videoStatusBadge">SAFE TO OPERATE</span>
+                            </div>
+                            <div class="video-iframe-wrapper">
+                                <iframe id="motorVideoIframe" 
+                                        src="https://www.youtube.com/embed/TZGWNH-iaHk?enablejsapi=1&autoplay=1&mute=1&loop=1&playlist=TZGWNH-iaHk&controls=0&modestbranding=1" 
+                                        title="Industrial DC Motor Operational Stream" 
+                                        frameborder="0" 
+                                        allow="autoplay; encrypted-media" 
+                                        allowfullscreen>
+                                </iframe>
+                            </div>
+                        </div>
+                    </div>
 
                     <div class="twin-info-sidebar">
                         <h4>Hardware Node Telemetry</h4>

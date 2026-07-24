@@ -219,6 +219,10 @@ function renderZGuardUI(state) {
         }
     }
 
+    // Trigger Motor Video Stream Overlay Play/Pause
+    const isMotorRunning = state.live ? (state.live.motor_status === "RUNNING") : false;
+    updateMotorVideoOverlay(isMotorRunning, state.safeToOperate);
+
     // D. Monitoring Panel Telemetry
     const monRelay = document.getElementById('monRelay');
     const monMotor = document.getElementById('monMotor');
@@ -445,3 +449,37 @@ function renderAiAgents(state) {
         `;
     }).join('');
 }
+
+/* ==========================================================================
+   8. Motor Telemetry Video Overlay Controller
+   ========================================================================== */
+function updateMotorVideoOverlay(isMotorRunning, isSafeToOperate) {
+    const overlay = document.getElementById('motorVideoOverlay');
+    const iframe = document.getElementById('motorVideoIframe');
+    const videoStatusBadge = document.getElementById('videoStatusBadge');
+
+    const shouldPlay = Boolean(isMotorRunning && isSafeToOperate);
+
+    if (overlay) {
+        if (shouldPlay) {
+            overlay.classList.add('active');
+            if (videoStatusBadge) videoStatusBadge.textContent = "SAFE TO OPERATE";
+
+            if (iframe && iframe.contentWindow) {
+                try {
+                    iframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'playVideo' }), '*');
+                } catch(e) {}
+            }
+        } else {
+            overlay.classList.remove('active');
+            if (videoStatusBadge) videoStatusBadge.textContent = "MOTOR STOPPED";
+
+            if (iframe && iframe.contentWindow) {
+                try {
+                    iframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'pauseVideo' }), '*');
+                } catch(e) {}
+            }
+        }
+    }
+}
+
