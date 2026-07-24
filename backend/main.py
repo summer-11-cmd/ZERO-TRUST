@@ -275,6 +275,19 @@ def monitor_live_telemetry_loop():
                     else:
                         last_seen_ms = float(last_seen)
 
+                    # Calculate ISI score & Safe To Operate flag
+                    scan_count = len(device_unauth_scans.get(dev_id, []))
+                    isi_score = max(0, 100 - (scan_count * 15) - (30 if relay_status == "OFF" else 0))
+                    safe_to_operate = bool(isi_score >= 70 and relay_status != "OFF" and stale_sec <= 10)
+
+                    try:
+                        db.reference(f"/devices/{dev_id}/live").update({
+                            "isi_score": isi_score,
+                            "safe_to_operate": safe_to_operate
+                        })
+                    except Exception:
+                        pass
+
                     # Device Offline Trigger (last_seen > 10s)
                     stale_sec = (now_ms - last_seen_ms) / 1000.0
                     if stale_sec > 10:

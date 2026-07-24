@@ -89,9 +89,15 @@
                     <div>
                         <div class="metric-number text-violet" id="overviewIsiScore">0 %</div>
                         <div class="metric-title">ISI — Industrial Security Index</div>
+                        
+                        <div class="isi-progress-track">
+                            <div class="isi-progress-fill" id="isiProgressBar" style="width: 0%;"></div>
+                        </div>
+
                         <div class="isi-breakdown">
-                            <div class="isi-item"><span>Zero-Trust Auth:</span> <strong class="isi-val" id="isiAuthVal">100%</strong></div>
-                            <div class="isi-item"><span>Fault Severity:</span> <strong class="isi-val" id="isiFaultVal">Clear</strong></div>
+                            <div class="isi-item"><span>Zero-Trust Auth Ratio:</span> <strong class="isi-val" id="isiAuthVal">100%</strong></div>
+                            <div class="isi-item"><span>Fault Severity Status:</span> <strong class="isi-val" id="isiFaultVal">Clear</strong></div>
+                            <div class="isi-item"><span>Operational Safety:</span> <strong class="isi-val text-emerald" id="isiSafetyVal">SAFE TO OPERATE</strong></div>
                         </div>
                     </div>
                 </div>
@@ -119,7 +125,14 @@
             <div class="twin-panel-card">
                 <div class="card-header-bar">
                     <h3><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg> 3D Device Twin — Animated DC Motor Node</h3>
-                    <span class="card-status-badge" id="twinRiskBadge">ZERO TRUST RISK: SAFE</span>
+                    <div class="twin-badges-row">
+                        <!-- Safe to Operate Indicator Pill -->
+                        <span class="operational-status-pill status-safe" id="twinOperationalBadge">
+                            <span class="pulse-dot"></span>
+                            <span id="twinOperationalText">SAFE TO OPERATE</span>
+                        </span>
+                        <span class="card-status-badge" id="twinRiskBadge">ZERO TRUST RISK: SAFE</span>
+                    </div>
                 </div>
                 <div class="twin-body-grid">
                     <!-- 3D Canvas Mounting Area -->
@@ -128,6 +141,10 @@
                     <div class="twin-info-sidebar">
                         <h4>Hardware Node Telemetry</h4>
                         <div class="info-list">
+                            <div class="info-item highlight-op-item">
+                                <span class="info-label">Operational Security</span>
+                                <strong class="info-val text-emerald" id="twinSidebarOpStatus">SAFE TO OPERATE</strong>
+                            </div>
                             <div class="info-item">
                                 <span class="info-label">Node Identifier</span>
                                 <strong class="info-val font-mono text-cyan" id="twinDevId">ESP32-01</strong>

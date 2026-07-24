@@ -100,6 +100,14 @@ function computeIsiScore() {
         window.ZGUARD_STATE.isiScore = 0;
         window.ZGUARD_STATE.isiAuthRatio = 0;
         window.ZGUARD_STATE.isiFaultScore = 0;
+        window.ZGUARD_STATE.safeToOperate = false;
+        return;
+    }
+
+    // Check if Firebase RTDB live node has server-evaluated isi_score & safe_to_operate
+    if (typeof live.isi_score === 'number' && typeof live.safe_to_operate !== 'undefined') {
+        window.ZGUARD_STATE.isiScore = Math.max(0, Math.min(100, live.isi_score));
+        window.ZGUARD_STATE.safeToOperate = Boolean(live.safe_to_operate);
         return;
     }
 
@@ -120,6 +128,9 @@ function computeIsiScore() {
     // 3. Composite ISI Score (60% Auth Ratio + 40% Fault Score)
     const composite = Math.round((authRatio * 0.6) + (window.ZGUARD_STATE.isiFaultScore * 0.4));
     window.ZGUARD_STATE.isiScore = Math.max(0, Math.min(100, composite));
+
+    // 4. Safe To Operate Flag (ISI >= 70 & Relay != OFF)
+    window.ZGUARD_STATE.safeToOperate = (window.ZGUARD_STATE.isiScore >= 70 && live.relay_status !== "OFF");
 }
 
 /**

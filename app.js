@@ -169,23 +169,45 @@ function renderZGuardUI(state) {
     // B. Overview Page Metrics
     const ovHealth = document.getElementById('overviewHealthScore');
     const ovIsi = document.getElementById('overviewIsiScore');
+    const isiBar = document.getElementById('isiProgressBar');
     const isiAuthVal = document.getElementById('isiAuthVal');
     const isiFaultVal = document.getElementById('isiFaultVal');
+    const isiSafetyVal = document.getElementById('isiSafetyVal');
     const ovOnline = document.getElementById('overviewOnlineDevices');
     const ovUnauth = document.getElementById('overviewUnauthCount');
 
     if (ovHealth) ovHealth.textContent = `${state.healthScore} %`;
     if (ovIsi) ovIsi.textContent = `${state.isiScore} %`;
+    if (isiBar) isiBar.style.width = `${state.isiScore}%`;
     if (isiAuthVal) isiAuthVal.textContent = `${state.isiAuthRatio}%`;
     if (isiFaultVal) isiFaultVal.textContent = state.isiFaultScore >= 90 ? "Clear" : (state.isiFaultScore >= 50 ? "Warning" : "Critical");
+    if (isiSafetyVal) {
+        isiSafetyVal.textContent = state.safeToOperate ? "SAFE TO OPERATE" : "UNSAFE TO OPERATE";
+        isiSafetyVal.className = state.safeToOperate ? "isi-val text-emerald" : "isi-val text-rose";
+    }
     if (ovOnline) ovOnline.textContent = `${state.onlineDevices} / 1`;
     if (ovUnauth) ovUnauth.textContent = `${state.unauthorizedToday}`;
 
-    // C. 3D Twin Sidebar
+    // C. 3D Twin Header Badges & Sidebar
+    const twinOpBadge = document.getElementById('twinOperationalBadge');
+    const twinOpText = document.getElementById('twinOperationalText');
+    const twinSidebarOpStatus = document.getElementById('twinSidebarOpStatus');
     const twinDevId = document.getElementById('twinDevId');
     const twinRelay = document.getElementById('twinRelay');
     const twinMotor = document.getElementById('twinMotor');
     const twinLastSeen = document.getElementById('twinLastSeen');
+
+    const isSafe = state.safeToOperate;
+    if (twinOpBadge) {
+        twinOpBadge.className = isSafe ? "operational-status-pill status-safe" : "operational-status-pill status-unsafe";
+    }
+    if (twinOpText) {
+        twinOpText.textContent = isSafe ? `SAFE TO OPERATE (ISI: ${state.isiScore}%)` : `UNSAFE TO OPERATE (ISI: ${state.isiScore}%)`;
+    }
+    if (twinSidebarOpStatus) {
+        twinSidebarOpStatus.textContent = isSafe ? "SAFE TO OPERATE" : "UNSAFE TO OPERATE";
+        twinSidebarOpStatus.className = isSafe ? "info-val text-emerald" : "info-val text-rose";
+    }
 
     if (twinDevId) twinDevId.textContent = state.deviceId;
     if (state.live) {
