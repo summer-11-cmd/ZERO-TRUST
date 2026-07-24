@@ -1,11 +1,15 @@
 """
 ZGuard Python AI Security & Threat Analysis Watcher Service
-- Single physical device watcher (/devices/*/rfid_log)
-- Zero Trust RFID unauthorized burst detection (>=3 scans in 60s window)
-- Triggers LLM analysis (with rule-based fallback)
-- Issues DISABLE_RELAY command to /devices/{id}/commands/latest on critical risk
-- Runs periodic 5-minute Predictive Maintenance trend checks
-- Sends Email (SMTP) or SMS (Twilio) alerts with 60-second cooldown debouncing
+- Single physical device watcher (/devices/{id})
+- Listens to real-time Firebase telemetry and RFID audit logs
+- Triggers LLM security analysis on unauthorized RFID burst windows
+- Evaluates voltage, current, relay, and heartbeat status thresholds
+- Dispatches SMTP Email and optional Twilio SMS alerts matching format:
+  ⚠️ ALERT
+  {event_type}
+  Device: {device_id}
+  Time: {time}
+  {action_taken}
 """
 
 import os
@@ -28,18 +32,24 @@ FIREBASE_SERVICE_ACCOUNT_PATH = os.getenv("FIREBASE_SERVICE_ACCOUNT_PATH", "serv
 FIREBASE_DB_URL = os.getenv("FIREBASE_DB_URL", "https://zguard-iot-default-rtdb.firebaseio.com")
 LLM_API_KEY = os.getenv("LLM_API_KEY", "")
 
-# Notification Credentials
+# Email Alert Credentials
 SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASS = os.getenv("SMTP_PASS", "")
 ALERT_EMAIL_TO = os.getenv("ALERT_EMAIL_TO", "")
 
+# Optional Twilio SMS Credentials
+TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
+TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
+TWILIO_FROM_NUMBER = os.getenv("TWILIO_FROM_NUMBER", "")
+ALERT_SMS_TO = os.getenv("ALERT_SMS_TO", "")
+
 # In-memory tracking for debouncing and burst detection
 device_unauth_scans = {}  # { device_id: [timestamps] }
-last_alert_time = {}      # { device_id: timestamp }
+last_alert_time = {}      # { f"{device_id}_{event_type}": timestamp }
 
-# Cooldown window in seconds
+# Cooldown window in seconds per event type
 ALERT_COOLDOWN_SEC = 60
 
 def init_firebase():
@@ -50,7 +60,8 @@ def init_firebase():
             firebase_admin.initialize_app(cred, {'databaseURL': FIREBASE_DB_URL})
             print(f"[ZGuard Backend] Firebase Admin SDK initialized with {FIREBASE_SERVICE_ACCOUNT_PATH}")
         else:
-            print(f"[ZGuard Backend] WARNING: Service account file '{FIREBASE_SERVICE_ACCOUNT_PATH}' not found.")
+            print(f"[ZGuard Backend] Note: '{FIREBASE_SERVICE_ACCOUNT_PATH}' not present. Using default DB URL listener if unauthenticated or public RTDB.")
+            firebase_admin.initialize_app(options={'databaseURL': FIREBASE_DB_URL})
 
 def call_llm_security_analysis(device_id, recent_scans):
     """
@@ -59,7 +70,7 @@ def call_llm_security_analysis(device_id, recent_scans):
     """
     try:
         if LLM_API_KEY:
-            prompt = f"Analyze these unauthorized RFID scans on IoT Device '{device_id}': {json.dumps(recent_scans)}. Output JSON with keys: risk_score (1-100), reason, recommendation."
+            prompt = f"Analyze these unauthorized RFID scans on industrial IoT Device '{device_id}': {json.dumps(recent_scans)}. Output valid JSON with keys: risk_score (1-100), reason, recommendation."
             headers = {"Authorization": f"Bearer {LLM_API_KEY}", "Content-Type": "application/json"}
             payload = {
                 "model": "gpt-3.5-turbo",
@@ -76,7 +87,7 @@ def call_llm_security_analysis(device_id, recent_scans):
                     "recommendation": parsed.get("recommendation", "Lock down hardware relay immediately.")
                 }
     except Exception as e:
-        print(f"[ZGuard LLM Fallback Triggered] Error calling LLM API: {e}")
+        print(f"[ZGuard LLM Fallback] {e}")
 
     # Deterministic Rule-Based Fallback
     scan_count = len(recent_scans)
@@ -89,29 +100,31 @@ def call_llm_security_analysis(device_id, recent_scans):
 
 def send_critical_alert(device_id, event_type, action_taken):
     """
-    Sends Email notification matching exact prompt format:
+    Dispatches Alert matching exact required format:
     ⚠️ ALERT
     {event_type}
     Device: {device_id}
     Time: {time}
     {action_taken}
     """
+    key = f"{device_id}_{event_type}"
     now = time.time()
-    if device_id in last_alert_time and (now - last_alert_time[device_id]) < ALERT_COOLDOWN_SEC:
-        print(f"[Alert Debounced] Cooldown active for {device_id}")
+    if key in last_alert_time and (now - last_alert_time[key]) < ALERT_COOLDOWN_SEC:
+        print(f"[Alert Debounced] Cooldown active for {key}")
         return
 
-    last_alert_time[device_id] = now
+    last_alert_time[key] = now
     formatted_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     alert_text = f"""⚠️ ALERT
 {event_type}
 Device: {device_id}
 Time: {formatted_time}
-{action_taken}
-"""
-    print(f"\n==================== CRITICAL SECURITY ALERT ====================\n{alert_text}=================================================================\n")
+{action_taken}"""
 
+    print(f"\n==================== CRITICAL SECURITY ALERT ====================\n{alert_text}\n=================================================================\n")
+
+    # 1. SMTP Email Alert
     if SMTP_USER and SMTP_PASS and ALERT_EMAIL_TO:
         try:
             msg = MIMEText(alert_text)
@@ -123,12 +136,76 @@ Time: {formatted_time}
                 server.starttls()
                 server.login(SMTP_USER, SMTP_PASS)
                 server.send_message(msg)
-            print(f"[Email Alert Sent] Alert dispatched to {ALERT_EMAIL_TO}")
+            print(f"[Email Alert] Dispatched to {ALERT_EMAIL_TO}")
         except Exception as err:
-            print(f"[Email Alert Error] Failed to send email: {err}")
+            print(f"[Email Alert Error] {err}")
+
+    # 2. Twilio SMS Alert (Optional)
+    if TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN and TWILIO_FROM_NUMBER and ALERT_SMS_TO:
+        try:
+            url = f"https://api.twilio.com/2010-04-01/Accounts/{TWILIO_ACCOUNT_SID}/Messages.json"
+            auth = (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+            data = {
+                "From": TWILIO_FROM_NUMBER,
+                "To": ALERT_SMS_TO,
+                "Body": alert_text
+            }
+            res = requests.post(url, data=data, auth=auth, timeout=8)
+            if res.status_code in [200, 201]:
+                print(f"[Twilio SMS Alert] Dispatched to {ALERT_SMS_TO}")
+            else:
+                print(f"[Twilio SMS Error] HTTP {res.status_code}: {res.text}")
+        except Exception as err:
+            print(f"[Twilio SMS Error] {err}")
+
+def monitor_live_telemetry_loop():
+    """Continuous background loop evaluating live telemetry thresholds for alerts"""
+    while True:
+        try:
+            time.sleep(4)
+            devices_ref = db.reference("/devices").get()
+            if devices_ref and isinstance(devices_ref, dict):
+                now_ms = time.time() * 1000
+                for dev_id, dev_data in devices_ref.items():
+                    live = dev_data.get("live", {})
+                    if not live:
+                        continue
+
+                    voltage = float(live.get("voltage", 220))
+                    current = float(live.get("current", 4.0))
+                    relay_status = str(live.get("relay_status", "ON")).upper()
+                    last_seen = live.get("last_seen", now_ms)
+                    
+                    if isinstance(last_seen, str):
+                        try:
+                            last_seen_ms = datetime.fromisoformat(last_seen).timestamp() * 1000
+                        except Exception:
+                            last_seen_ms = now_ms
+                    else:
+                        last_seen_ms = float(last_seen)
+
+                    # Trigger 1: Overvoltage (> 250V)
+                    if voltage > 250:
+                        send_critical_alert(dev_id, "Overvoltage Condition (> 250V)", f"Action: Voltage spike detected at {voltage}V. System monitoring isolation.")
+
+                    # Trigger 2: Overcurrent (> 7.0A)
+                    if current > 7.0:
+                        send_critical_alert(dev_id, "Overcurrent Load (> 7.0A)", f"Action: Overcurrent detected at {current}A. Motor drive isolation recommended.")
+
+                    # Trigger 3: Device Offline (last_seen > 10s)
+                    stale_sec = (now_ms - last_seen_ms) / 1000.0
+                    if stale_sec > 10:
+                        send_critical_alert(dev_id, "Device Connection Offline", f"Action: Heartbeat lost for {int(stale_sec)} seconds. Flagged offline.")
+
+                    # Trigger 4: Relay Failure / Disabled State
+                    if relay_status == "OFF":
+                        send_critical_alert(dev_id, "Relay Circuit Disabled / Cut", "Action: Hardware contactor opened or emergency trip triggered.")
+
+        except Exception as err:
+            print(f"[Telemetry Loop Error] {err}")
 
 def handle_rfid_event(event):
-    """Callback triggered whenever a new RFID scan log is written to RTDB"""
+    """Callback triggered whenever RFID scan log data changes in RTDB"""
     try:
         data = event.data
         if not data or not isinstance(data, dict):
@@ -145,17 +222,17 @@ def handle_rfid_event(event):
             if device_id not in device_unauth_scans:
                 device_unauth_scans[device_id] = []
 
-            # Keep scans within last 60 seconds
             device_unauth_scans[device_id].append({"uid": uid, "timestamp": now})
             device_unauth_scans[device_id] = [s for s in device_unauth_scans[device_id] if (now - s["timestamp"]) <= 60]
 
             scan_count = len(device_unauth_scans[device_id])
-            print(f"[ZGuard Watcher] Unauthorized scan on {device_id} ({scan_count} in 60s window)")
+            print(f"[ZGuard Watcher] Unauthorized RFID scan on {device_id} (Scan #{scan_count} in 60s)")
 
-            # Burst Threshold: >= 3 unauthorized scans in 60s
+            # Trigger 5: Unauthorized RFID attempt (Immediate alert + burst evaluation)
+            action_str = f"Action: Unauthorized card scan (UID: {uid}). "
             if scan_count >= 3:
                 analysis = call_llm_security_analysis(device_id, device_unauth_scans[device_id])
-
+                
                 sec_event = {
                     "type": "unauthorized_rfid_burst",
                     "severity": "critical" if analysis["risk_score"] > 70 else "warning",
@@ -175,68 +252,36 @@ def handle_rfid_event(event):
                     "timestamp": {".sv": "timestamp"}
                 }
 
-                # Write to Firebase RTDB
                 db.reference(f"/devices/{device_id}/security_events").push(sec_event)
                 db.reference(f"/devices/{device_id}/ai_incidents").push(ai_incident)
 
-                # Execute DISABLE_RELAY Command if Risk Score > 70
                 if analysis["risk_score"] > 70:
                     cmd_payload = {"cmd": "DISABLE_RELAY", "issued_at": {".sv": "timestamp"}}
                     db.reference(f"/devices/{device_id}/commands/latest").set(cmd_payload)
-                    action_taken = "Action: Cut relay (DISABLE_RELAY issued)"
-                else:
-                    action_taken = "Action: Elevated monitoring enabled"
+                    action_str += "Automatic DISABLE_RELAY command dispatched."
 
-                send_critical_alert(device_id, "unauthorized_rfid_burst", action_taken)
+                send_critical_alert(device_id, "Unauthorized RFID Burst Scan", action_str)
                 device_unauth_scans[device_id] = []
+            else:
+                send_critical_alert(device_id, "Unauthorized RFID Scan", action_str)
 
     except Exception as e:
-        print(f"[ZGuard Watcher Exception] Error in RFID event callback: {e}")
-
-def run_predictive_maintenance_check():
-    """Periodic (5-minute) background check for voltage/current anomalies"""
-    while True:
-        try:
-            time.sleep(300) # 5 minutes
-            devices_ref = db.reference("/devices").get()
-            if devices_ref and isinstance(devices_ref, dict):
-                for dev_id, dev_data in devices_ref.items():
-                    live = dev_data.get("live", {})
-                    voltage = float(live.get("voltage", 220))
-                    current = float(live.get("current", 4.0))
-
-                    if voltage > 250 or current > 7.0:
-                        incident = {
-                            "agent": "predictive_maintenance",
-                            "payload": {
-                                "fault_type": "voltage_current_spike",
-                                "voltage": voltage,
-                                "current": current,
-                                "confidence": 92,
-                                "recommendation": "Inspect line transformer and motor contactors."
-                            },
-                            "timestamp": {".sv": "timestamp"}
-                        }
-                        db.reference(f"/devices/{dev_id}/ai_incidents").push(incident)
-                        action_taken = f"Action: Logged predictive fault (Voltage: {voltage}V, Current: {current}A)"
-                        send_critical_alert(dev_id, "voltage_current_spike", action_taken)
-
-        except Exception as err:
-            print(f"[Predictive Maintenance Error] {err}")
+        print(f"[ZGuard Watcher Error] {e}")
 
 def start_watcher():
-    """Start listening to /devices/*/rfid_log stream"""
+    """Start listening to Firebase streams and background loops"""
     init_firebase()
-    print("[ZGuard Watcher Service] Listening for RFID events on /devices/*/rfid_log...")
+    print("[ZGuard Watcher Service] Started live monitoring on /devices...")
 
+    # Start live telemetry loop thread
+    telem_thread = threading.Thread(target=monitor_live_telemetry_loop, daemon=True)
+    telem_thread.start()
+
+    # Listen to RFID logs
     try:
         db.reference("/devices").listen(handle_rfid_event)
     except Exception as e:
-        print(f"[ZGuard Backend Stream Note] {e}")
-
-    # Start Predictive Maintenance thread
-    pm_thread = threading.Thread(target=run_predictive_maintenance_check, daemon=True)
-    pm_thread.start()
+        print(f"[ZGuard Stream Listener] {e}")
 
 if __name__ == "__main__":
     start_watcher()

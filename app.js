@@ -186,14 +186,17 @@ function renderZGuardUI(state) {
    ========================================================================== */
 function initRfidLogFilters() {
     const searchInput = document.getElementById('filterSearch');
+    const dateInput = document.getElementById('filterDate');
     const statusSelect = document.getElementById('filterStatus');
     const resetBtn = document.getElementById('btnResetFilters');
 
     if (searchInput) searchInput.addEventListener('input', () => renderFilteredRfidLogs(window.ZGUARD_STATE.rfidLogs));
+    if (dateInput) dateInput.addEventListener('change', () => renderFilteredRfidLogs(window.ZGUARD_STATE.rfidLogs));
     if (statusSelect) statusSelect.addEventListener('change', () => renderFilteredRfidLogs(window.ZGUARD_STATE.rfidLogs));
     if (resetBtn) {
         resetBtn.addEventListener('click', () => {
             if (searchInput) searchInput.value = "";
+            if (dateInput) dateInput.value = "";
             if (statusSelect) statusSelect.value = "ALL";
             renderFilteredRfidLogs(window.ZGUARD_STATE.rfidLogs);
         });
@@ -204,6 +207,7 @@ function renderFilteredRfidLogs(logs) {
     const tableBody = document.getElementById('rfidTableBody');
     const badge = document.getElementById('rfidLogCountBadge');
     const searchInput = document.getElementById('filterSearch');
+    const dateInput = document.getElementById('filterDate');
     const statusSelect = document.getElementById('filterStatus');
 
     if (!tableBody) return;
@@ -217,6 +221,19 @@ function renderFilteredRfidLogs(logs) {
             (l.uid && l.uid.toLowerCase().includes(q)) || 
             (l.user_name && l.user_name.toLowerCase().includes(q))
         );
+    }
+
+    // Filter by Date (YYYY-MM-DD)
+    if (dateInput && dateInput.value) {
+        const targetDateStr = dateInput.value;
+        filtered = filtered.filter(l => {
+            if (!l.timestamp) return false;
+            const logDate = new Date(l.timestamp);
+            const yyyy = logDate.getFullYear();
+            const mm = String(logDate.getMonth() + 1).padStart(2, '0');
+            const dd = String(logDate.getDate()).padStart(2, '0');
+            return `${yyyy}-${mm}-${dd}` === targetDateStr;
+        });
     }
 
     // Filter by Status (AUTHORIZED / UNAUTHORIZED)
