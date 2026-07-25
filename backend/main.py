@@ -276,14 +276,22 @@ def monitor_live_telemetry_loop():
         try:
             time.sleep(4)
             devices_ref = db.reference("/devices").get()
+            zguard_ref = db.reference("/zguard").get()
+            
+            targets = {}
             if devices_ref and isinstance(devices_ref, dict):
+                targets.update(devices_ref)
+            if zguard_ref and isinstance(zguard_ref, dict):
+                targets["ESP32-01"] = {"live": zguard_ref}
+
+            if targets:
                 now_ms = time.time() * 1000
-                for dev_id, dev_data in devices_ref.items():
-                    live = dev_data.get("live", {})
+                for dev_id, dev_data in targets.items():
+                    live = dev_data.get("live", dev_data)
                     if not live:
                         continue
 
-                    relay_status = str(live.get("relay_status", "ON")).upper()
+                    relay_status = str(live.get("relay_status", live.get("relayStatus", "ON"))).upper()
                     last_seen = live.get("last_seen", now_ms)
                     
                     if isinstance(last_seen, str):
@@ -294,10 +302,10 @@ def monitor_live_telemetry_loop():
                     else:
                         last_seen_ms = float(last_seen)
 
-                    # Calculate ISI score & Safe To Operate flag
+                    stale_sec = (now_ms - last_seen_ms) / 1000.0
                     scan_count = len(device_unauth_scans.get(dev_id, []))
                     isi_score = max(0, 100 - (scan_count * 15) - (30 if relay_status == "OFF" else 0))
-                    safe_to_operate = bool(isi_score >= 70 and relay_status != "OFF" and stale_sec <= 10)
+                    safe_to_operate = bool(isi_score >= 70 and relay_status != "OFF")
 
                     try:
                         db.reference(f"/devices/{dev_id}/live").update({
