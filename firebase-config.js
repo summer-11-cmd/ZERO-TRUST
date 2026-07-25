@@ -163,7 +163,13 @@ const DEFAULT_CREDENTIALS = {
 function getStoredCredentials() {
     try {
         const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored) return JSON.parse(stored);
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            // Purge dummy placeholder URLs from earlier sessions
+            if (parsed.databaseURL && !parsed.databaseURL.includes("your-app")) {
+                return parsed;
+            }
+        }
     } catch (e) {
         console.warn("[ZGuard Creds] Reading localStorage failed:", e);
     }
@@ -223,71 +229,116 @@ function initFirebaseClient() {
 
     const config = {
         apiKey: creds.apiKey,
-        authDomain: `${creds.projectId || 'zguard-iot'}.firebaseapp.com`,
+        authDomain: `${creds.projectId || 'z-guard'}.firebaseapp.com`,
         databaseURL: creds.databaseURL,
-        projectId: creds.projectId || "zguard-iot"
+        projectId: creds.projectId || "z-guard"
     };
 
     if (window.firebase && window.firebase.database) {
         try {
-            if (!firebase.apps.length) {
-                firebase.initializeApp(config);
+            // Delete old app instance if already initialized to force reload with new config
+            if (firebase.apps.length > 0) {
+                firebase.app().delete().then(() => startFirebaseListeners(config)).catch(() => startFirebaseListeners(config));
+            } else {
+                startFirebaseListeners(config);
             }
-            const db = firebase.database();
-            const deviceId = window.ZGUARD_STATE.deviceId;
+        } catch (e) {
+            console.error("[ZGuard RTDB Error]", e);
+        }
+    }
+}
 
-            console.log(`[ZGuard RTDB] Listening to /devices/${deviceId}...`);
+function startFirebaseListeners(config) {
+    try {
+        if (!firebase.apps.length) {
+            firebase.initializeApp(config);
+        }
+        const db = firebase.database();
+        const deviceId = window.ZGUARD_STATE.deviceId;
 
-            // Listen to /devices/{deviceId}/live
-            db.ref(`/devices/${deviceId}/live`).on('value', (snapshot) => {
-                const data = snapshot.val();
+        console.log(`[ZGuard RTDB] Connected to ${config.databaseURL}. Subscribing to telemetry...`);
+
+        // Handler function for live snapshot updates
+        const handleLiveSnapshot = (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                console.log("[ZGuard Live Telemetry Received]", data);
                 window.ZGUARD_STATE.live = data;
                 window.ZGUARD_STATE.connectionStatus = evaluateConnectionStatus(data);
                 notifySubscribers();
-            });
+            }
+        };
 
-            // Listen to /devices/{deviceId}/rfid_log (limit to last 50)
-            db.ref(`/devices/${deviceId}/rfid_log`).limitToLast(50).on('value', (snapshot) => {
-                const logs = [];
-                snapshot.forEach(child => {
-                    logs.unshift({ id: child.key, ...child.val() });
-                });
-                window.ZGUARD_STATE.rfidLogs = logs;
-                notifySubscribers();
-            });
+        // Listen to /devices/{deviceId}/live AND fallback to /live
+        db.ref(`/devices/${deviceId}/live`).on('value', handleLiveSnapshot);
+        db.ref(`/live`).on('value', handleLiveSnapshot);
 
-            // Listen to /devices/{deviceId}/security_events (limit to last 50)
-            db.ref(`/devices/${deviceId}/security_events`).limitToLast(50).on('value', (snapshot) => {
-                const events = [];
-                snapshot.forEach(child => {
-                    events.unshift({ id: child.key, ...child.val() });
-                });
-                window.ZGUARD_STATE.securityEvents = events;
-                if (window.triggerSecurityParticleBurst) {
-                    window.triggerSecurityParticleBurst();
+        // Handler function for rfid_log updates
+        const handleRfidSnapshot = (snapshot) => {
+            const val = snapshot.val();
+            if (!val) return;
+            const logs = [];
+            if (Array.isArray(val)) {
+                val.forEach((item, idx) => logs.unshift({ id: idx, ...item }));
+            } else if (typeof val === 'object') {
+                Object.keys(val).forEach(key => logs.unshift({ id: key, ...val[key] }));
+            }
+            window.ZGUARD_STATE.rfidLogs = logs;
+            notifySubscribers();
+        };
+
+        // Listen to /devices/{deviceId}/rfid_log AND fallback to /rfid_log
+        db.ref(`/devices/${deviceId}/rfid_log`).limitToLast(50).on('value', handleRfidSnapshot);
+        db.ref(`/rfid_log`).limitToLast(50).on('value', handleRfidSnapshot);
+
+        // Handler function for security_events
+        const handleSecuritySnapshot = (snapshot) => {
+            const val = snapshot.val();
+            if (!val) return;
+            const events = [];
+            if (typeof val === 'object') {
+                Object.keys(val).forEach(key => events.unshift({ id: key, ...val[key] }));
+            }
+            window.ZGUARD_STATE.securityEvents = events;
+            if (window.triggerSecurityParticleBurst) {
+                window.triggerSecurityParticleBurst();
+            }
+            notifySubscribers();
+        };
+
+        db.ref(`/devices/${deviceId}/security_events`).limitToLast(50).on('value', handleSecuritySnapshot);
+        db.ref(`/security_events`).limitToLast(50).on('value', handleSecuritySnapshot);
+
+        // Handler function for ai_incidents
+        const handleAiSnapshot = (snapshot) => {
+            const val = snapshot.val();
+            if (!val) return;
+            const incidents = [];
+            if (typeof val === 'object') {
+                Object.keys(val).forEach(key => incidents.unshift({ id: key, ...val[key] }));
+            }
+            window.ZGUARD_STATE.aiIncidents = incidents;
+            notifySubscribers();
+        };
+
+        db.ref(`/devices/${deviceId}/ai_incidents`).limitToLast(20).on('value', handleAiSnapshot);
+        db.ref(`/ai_incidents`).limitToLast(20).on('value', handleAiSnapshot);
+
+        // Connection heartbeat monitor
+        setInterval(() => {
+            if (window.ZGUARD_STATE.live) {
+                const newStatus = evaluateConnectionStatus(window.ZGUARD_STATE.live);
+                if (newStatus !== window.ZGUARD_STATE.connectionStatus) {
+                    window.ZGUARD_STATE.connectionStatus = newStatus;
+                    notifySubscribers();
                 }
-                notifySubscribers();
-            });
+            }
+        }, 3000);
 
-            // Listen to /devices/{deviceId}/ai_incidents
-            db.ref(`/devices/${deviceId}/ai_incidents`).limitToLast(20).on('value', (snapshot) => {
-                const incidents = [];
-                snapshot.forEach(child => {
-                    incidents.unshift({ id: child.key, ...child.val() });
-                });
-                window.ZGUARD_STATE.aiIncidents = incidents;
-                notifySubscribers();
-            });
-
-            // Periodically check connection staleness every 3s
-            setInterval(() => {
-                if (window.ZGUARD_STATE.live) {
-                    const newStatus = evaluateConnectionStatus(window.ZGUARD_STATE.live);
-                    if (newStatus !== window.ZGUARD_STATE.connectionStatus) {
-                        window.ZGUARD_STATE.connectionStatus = newStatus;
-                        notifySubscribers();
-                    }
-                }
+    } catch (e) {
+        console.error("[ZGuard Listener Error]", e);
+    }
+}
             }, 3000);
 
             return;
