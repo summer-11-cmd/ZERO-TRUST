@@ -271,58 +271,33 @@ Time: {formatted_time}
             print(f"[Twilio SMS Error] {err}")
 
 def monitor_live_telemetry_loop():
-    """Continuous background loop evaluating live relay state and heartbeat staleness"""
+    """Continuous background loop evaluating live relay state and heartbeat staleness at /devices/ESP32-01/live"""
     while True:
         try:
             time.sleep(4)
-            devices_ref = db.reference("/devices").get()
-            zguard_ref = db.reference("/zguard").get()
-            
-            targets = {}
-            if devices_ref and isinstance(devices_ref, dict):
-                targets.update(devices_ref)
-            if zguard_ref and isinstance(zguard_ref, dict):
-                targets["ESP32-01"] = {"live": zguard_ref}
-
-            if targets:
+            dev_data = db.reference("/devices/ESP32-01/live").get()
+            if dev_data and isinstance(dev_data, dict):
                 now_ms = time.time() * 1000
-                for dev_id, dev_data in targets.items():
-                    live = dev_data.get("live", dev_data)
-                    if not live:
-                        continue
-
-                    relay_status = str(live.get("relay_status", live.get("relayStatus", "ON"))).upper()
-                    last_seen = live.get("last_seen", now_ms)
-                    
-                    if isinstance(last_seen, str):
-                        try:
-                            last_seen_ms = datetime.fromisoformat(last_seen).timestamp() * 1000
-                        except Exception:
-                            last_seen_ms = now_ms
-                    else:
-                        last_seen_ms = float(last_seen)
-
-                    stale_sec = (now_ms - last_seen_ms) / 1000.0
-                    scan_count = len(device_unauth_scans.get(dev_id, []))
-                    isi_score = max(0, 100 - (scan_count * 15) - (30 if relay_status == "OFF" else 0))
-                    safe_to_operate = bool(isi_score >= 70 and relay_status != "OFF")
-
+                decision = str(dev_data.get("decision", "ACCESS_DENIED")).upper()
+                last_seen = dev_data.get("lastSeen", now_ms)
+                
+                if isinstance(last_seen, str):
                     try:
-                        db.reference(f"/devices/{dev_id}/live").update({
-                            "isi_score": isi_score,
-                            "safe_to_operate": safe_to_operate
-                        })
+                        last_seen_ms = datetime.fromisoformat(last_seen).timestamp() * 1000
                     except Exception:
-                        pass
+                        last_seen_ms = now_ms
+                else:
+                    last_seen_ms = float(last_seen)
 
-                    # Device Offline Trigger (last_seen > 10s)
-                    stale_sec = (now_ms - last_seen_ms) / 1000.0
-                    if stale_sec > 10:
-                        send_critical_alert(dev_id, "Device Connection Offline", f"Action: Gateway heartbeat stale for {int(stale_sec)}s.")
+                stale_sec = (now_ms - last_seen_ms) / 1000.0
 
-                    # Relay Cut Trigger
-                    if relay_status == "OFF":
-                        send_critical_alert(dev_id, "Relay Circuit Open / Disabled", "Action: Hardware interlock trip logged.")
+                # Trigger connection offline alert if stale > 10s
+                if stale_sec > 10:
+                    send_critical_alert("ESP32-01", "Device Connection Offline", f"Action: Gateway heartbeat stale for {int(stale_sec)}s.")
+
+                # Trigger alert if access denied / relay cut
+                if decision == "ACCESS_DENIED":
+                    send_critical_alert("ESP32-01", "Access Denied / Interlock Trip", "Action: Hardware interlock trip logged.")
 
         except Exception as err:
             print(f"[Telemetry Loop Error] {err}")

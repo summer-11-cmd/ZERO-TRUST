@@ -1,7 +1,8 @@
 /* ==========================================================================
    ZGuard ESP32 Industrial IoT Firmware — Zero Trust Edge Gateway
-   Hardware: ESP32 NodeMCU / WROOM-32 + MFRC522 RFID + Relay Module + Sensors
+   Hardware: ESP32 NodeMCU / WROOM-32 + MFRC522 RFID + Relay Module + Motors
    Library: mobizt/Firebase-ESP-Client
+   Path: devices/ESP32-01/live
    ========================================================================== */
 
 #include <Arduino.h>
@@ -18,8 +19,6 @@
 // Hardware Pin Assignments
 #define RELAY_PIN 26
 #define MOTOR_PIN 27
-#define VOLTAGE_ADC_PIN 34
-#define CURRENT_ADC_PIN 35
 #define RFID_SS_PIN 5
 #define RFID_RST_PIN 22
 
@@ -43,6 +42,15 @@ const unsigned long SEND_INTERVAL_MS = 2000;
 
 MFRC522 rfid(RFID_SS_PIN, RFID_RST_PIN);
 
+// Global Canonical State (Matches exact ZGuard Firebase Schema)
+int currentHealthScore = 100;
+int currentIsi = 100;
+int currentTrustScore = 100;
+String currentRfidStatus = "VALID";
+String currentTamperStatus = "SAFE";
+String currentMotorStatus = "RUNNING";
+String currentDecision = "ACCESS_GRANTED";
+
 // Helper Functions
 bool checkZeroTrustWhitelist(String uid) {
     for (int i = 0; i < WHITELIST_SIZE; i++) {
@@ -51,6 +59,25 @@ bool checkZeroTrustWhitelist(String uid) {
         }
     }
     return false;
+}
+
+// Push clean single write to devices/ESP32-01/live
+void sendLiveTelemetry() {
+    FirebaseJson liveJson;
+    liveJson.add("healthScore", currentHealthScore);
+    liveJson.add("isi", currentIsi);
+    liveJson.add("trustScore", currentTrustScore);
+    liveJson.add("rfidStatus", currentRfidStatus);
+    liveJson.add("tamperStatus", currentTamperStatus);
+    liveJson.add("motorStatus", currentMotorStatus);
+    liveJson.add("decision", currentDecision);
+    liveJson.set("lastSeen", {".sv": "timestamp"}); // Server timestamp
+
+    if (Firebase.RTDB.setJSON(&fbdoWrite, "/devices/" DEVICE_ID "/live", &liveJson)) {
+        Serial.println("[ZGuard] Clean Telemetry Written to /devices/ESP32-01/live");
+    } else {
+        Serial.printf("[ZGuard Write Error] %s\n", fbdoWrite.errorReason().c_str());
+    }
 }
 
 // Stream Callback for Command Listener (/devices/{DEVICE_ID}/commands/latest)
@@ -64,21 +91,28 @@ void streamCallback(FirebaseStream data) {
             Serial.printf("[ZGuard Command Received] -> %s\n", command.c_str());
 
             if (command == "DISABLE_RELAY") {
-                digitalWrite(RELAY_PIN, LOW); // Cut Relay Output Sub-second
+                digitalWrite(RELAY_PIN, LOW); // Cut Relay Output
                 digitalWrite(MOTOR_PIN, LOW);
-                Serial.println("[ZGuard] RELAY CUT — Command Executed!");
+                
+                currentMotorStatus = "STOPPED";
+                currentDecision = "ACCESS_DENIED";
+                currentTamperStatus = "RELAY_DISABLED";
+                currentIsi = 40;
+                currentHealthScore = 50;
 
-                // Update /live/relay_status immediately
-                Firebase.RTDB.setString(&fbdoWrite, "/devices/" DEVICE_ID "/live/relay_status", "OFF");
-                Firebase.RTDB.setString(&fbdoWrite, "/devices/" DEVICE_ID "/live/motor_status", "STOPPED");
+                sendLiveTelemetry();
             } 
             else if (command == "ENABLE_RELAY") {
                 digitalWrite(RELAY_PIN, HIGH);
                 digitalWrite(MOTOR_PIN, HIGH);
-                Serial.println("[ZGuard] RELAY ENABLED");
+                
+                currentMotorStatus = "RUNNING";
+                currentDecision = "ACCESS_GRANTED";
+                currentTamperStatus = "SAFE";
+                currentIsi = 100;
+                currentHealthScore = 100;
 
-                Firebase.RTDB.setString(&fbdoWrite, "/devices/" DEVICE_ID "/live/relay_status", "ON");
-                Firebase.RTDB.setString(&fbdoWrite, "/devices/" DEVICE_ID "/live/motor_status", "RUNNING");
+                sendLiveTelemetry();
             }
         }
     }
@@ -86,7 +120,7 @@ void streamCallback(FirebaseStream data) {
 
 void streamTimeoutCallback(bool timeout) {
     if (timeout) {
-        Serial.println("[ZGuard Firebase Stream] Timeout occurred, resuming...");
+        Serial.println("[ZGuard Firebase Stream] Timeout, retrying...");
     }
 }
 
@@ -117,12 +151,12 @@ void setup() {
     Firebase.begin(&config, &auth);
     Firebase.reconnectWiFi(true);
 
-    // Set online status
-    Firebase.RTDB.setBool(&fbdoWrite, "/devices/" DEVICE_ID "/live/online", true);
+    // Initial Clean Telemetry Write to /devices/ESP32-01/live
+    sendLiveTelemetry();
 
     // 3. Subscribe to Command Stream
     if (!Firebase.RTDB.beginStream(&fbdoStream, "/devices/" DEVICE_ID "/commands/latest")) {
-        Serial.printf("[ZGuard Stream] Error: %s\n", fbdoStream.errorReason().c_str());
+        Serial.printf("[ZGuard Stream Error] %s\n", fbdoStream.errorReason().c_str());
     }
     Firebase.RTDB.setStreamCallback(&fbdoStream, streamCallback, streamTimeoutCallback);
 }
@@ -139,22 +173,44 @@ void processRfidScan() {
     uidStr.toUpperCase();
 
     bool isAuthorized = checkZeroTrustWhitelist(uidStr);
-    String statusStr = isAuthorized ? "AUTHORIZED" : "UNAUTHORIZED";
+    
+    // Coordinated state update — decision and rfidStatus MUST agree
+    if (isAuthorized) {
+        currentRfidStatus = "VALID";
+        currentDecision = "ACCESS_GRANTED";
+        currentMotorStatus = "RUNNING";
+        currentTamperStatus = "SAFE";
+        currentHealthScore = 100;
+        currentIsi = 100;
+        currentTrustScore = 100;
+        digitalWrite(RELAY_PIN, HIGH);
+        digitalWrite(MOTOR_PIN, HIGH);
+    } else {
+        currentRfidStatus = "UNAUTHORIZED";
+        currentDecision = "ACCESS_DENIED";
+        currentMotorStatus = "STOPPED";
+        currentTamperStatus = "TAMPER_WARNING";
+        currentHealthScore = 60;
+        currentIsi = 50;
+        currentTrustScore = 40;
+        digitalWrite(RELAY_PIN, LOW);
+        digitalWrite(MOTOR_PIN, LOW);
+    }
 
-    Serial.printf("[RFID Scan] UID: %s | Status: %s\n", uidStr.c_str(), statusStr.c_str());
+    Serial.printf("[RFID Scan] UID: %s | Status: %s | Decision: %s\n", uidStr.c_str(), currentRfidStatus.c_str(), currentDecision.c_str());
 
-    // Push new scan entry to /devices/{DEVICE_ID}/rfid_log
+    // Push audit entry to /devices/{DEVICE_ID}/rfid_log
     FirebaseJson logJson;
     logJson.add("uid", uidStr);
-    logJson.add("status", statusStr);
-    logJson.add("user_name", isAuthorized ? "Authorized Operator" : "Unknown");
+    logJson.add("status", currentRfidStatus);
+    logJson.add("decision", currentDecision);
+    logJson.add("user_name", isAuthorized ? "Authorized Operator" : "Unknown Operator");
     logJson.set("timestamp", {".sv": "timestamp"});
 
     Firebase.RTDB.pushJSON(&fbdoWrite, "/devices/" DEVICE_ID "/rfid_log", &logJson);
 
-    // Update rfid_last_uid and rfid_last_status in /live
-    Firebase.RTDB.setString(&fbdoWrite, "/devices/" DEVICE_ID "/live/rfid_last_uid", uidStr);
-    Firebase.RTDB.setString(&fbdoWrite, "/devices/" DEVICE_ID "/live/rfid_last_status", statusStr);
+    // Immediately push live state update
+    sendLiveTelemetry();
 
     rfid.PICC_HaltA();
     rfid.PCD_StopCrypto1();
@@ -163,23 +219,9 @@ void processRfidScan() {
 void loop() {
     processRfidScan();
 
-    // Telemetry Telemetry Push every 2 Seconds
+    // Telemetry Push every 2 Seconds
     if (millis() - lastSendTime >= SEND_INTERVAL_MS) {
         lastSendTime = millis();
-
-        float rawVoltage = analogRead(VOLTAGE_ADC_PIN) * (3.3 / 4095.0) * 100.0;
-        float rawCurrent = analogRead(CURRENT_ADC_PIN) * (3.3 / 4095.0) * 2.0;
-
-        FirebaseJson liveJson;
-        liveJson.add("relay_status", digitalRead(RELAY_PIN) == HIGH ? "ON" : "OFF");
-        liveJson.add("motor_status", digitalRead(MOTOR_PIN) == HIGH ? "RUNNING" : "STOPPED");
-        liveJson.add("online", true);
-        liveJson.set("last_seen", {".sv": "timestamp"}); // Server timestamp
-
-        if (Firebase.RTDB.updateNode(&fbdoWrite, "/devices/" DEVICE_ID "/live", &liveJson)) {
-            Serial.println("[ZGuard] Telemetry Live Update Success");
-        } else {
-            Serial.printf("[ZGuard] Live Update Error: %s\n", fbdoWrite.errorReason().c_str());
-        }
+        sendLiveTelemetry();
     }
 }

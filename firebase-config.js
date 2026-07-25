@@ -1,9 +1,18 @@
 /* ==========================================================================
-   ZGUARD — Industrial Single-Device Firebase RTDB Client & State Bus
+   ZGUARD — Single-Device Firebase RTDB Client & State Bus
+   Canonical Path: /devices/ESP32-01/live
    ========================================================================== */
 
-// Default / Stored Credentials Key in localStorage
+// Default Credentials Key in localStorage
 const STORAGE_KEY = "zguard_firebase_credentials";
+
+// Canonical Region-Specific Database URL
+const DEFAULT_CREDENTIALS = {
+    apiKey: "AIzaSyBqiX3X0IP20UZrL-hAuBKbRH8jkq2HnLY",
+    databaseURL: "https://z-guard-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "z-guard",
+    deviceId: "ESP32-01"
+};
 
 // Global State Bus for Single-Device ZGuard Dashboard
 window.ZGUARD_STATE = {
@@ -15,9 +24,10 @@ window.ZGUARD_STATE = {
     securityEvents: [],
     aiIncidents: [],
     
-    // Live Computed Metrics
+    // Live Canonical Metrics
     healthScore: 100,
     isiScore: 100,
+    trustScore: 100,
     isiAuthRatio: 100,
     isiFaultScore: 100,
     safeToOperate: true,
@@ -37,48 +47,39 @@ function subscribeZGuardState(callback) {
 
 function notifySubscribers() {
     computeLiveMetrics();
-    computeIsiScore();
     window.ZGUARD_SUBSCRIBERS.forEach(cb => cb(window.ZGUARD_STATE));
 }
 
 /**
- * Normalizes telemetry payloads written by ESP32 (e.g. /zguard, /live, /devices/ESP32-01)
+ * Parses canonical schema from /devices/ESP32-01/live
  */
-function normalizeLiveData(raw) {
-    if (!raw || typeof raw !== 'object') return null;
+function parseCanonicalLiveData(data) {
+    if (!data || typeof data !== 'object') return null;
 
-    // Handle nested zguard object, live object, or direct object
-    const data = raw.zguard || raw.live || raw["ESP32-01"] || raw;
+    const motorStatus = (data.motorStatus || "STOPPED").toString().toUpperCase();
+    const decision = (data.decision || "ACCESS_DENIED").toString().toUpperCase();
+    const rfidStatus = (data.rfidStatus || "UNKNOWN").toString().toUpperCase();
+    const tamperStatus = (data.tamperStatus || "SAFE").toString().toUpperCase();
 
-    // Extract Motor Status ("Running", "RUNNING", "Stopped", "STOPPED")
-    const rawMotor = (data["motor status"] || data.motorStatus || data.motor_status || "STOPPED").toString().toUpperCase();
-    const motorStatus = (rawMotor === "RUNNING" || rawMotor === "ON") ? "RUNNING" : (rawMotor === "STOPPED" || rawMotor === "OFF" ? "STOPPED" : rawMotor);
+    const isi = typeof data.isi === 'number' ? data.isi : 100;
+    const healthScore = typeof data.healthScore === 'number' ? data.healthScore : 100;
+    const trustScore = typeof data.trustScore === 'number' ? data.trustScore : 100;
 
-    // Extract Relay Status
-    const rawRelay = (data["relay status"] || data.relayStatus || data.relay_status || "ON").toString().toUpperCase();
-    const relayStatus = (rawRelay === "OFF" || rawRelay === "CUT" || rawRelay === "DISABLED") ? "OFF" : "ON";
-
-    // Extract Decision & Safe to Operate Flag
-    const decisionStr = (data.decision || "").toString().toUpperCase();
-    const isiVal = Number(data.isi ?? data.ISI ?? data.isi_score ?? data.isiScore ?? 100);
-    const safeToOperate = (decisionStr === "SAFE TO OPERATE") || (data.safe_to_operate === true) || (data.safeToOperate === true) || (isiVal >= 70 && relayStatus !== "OFF");
-
-    // Extract Health & Trust Score
-    const healthScore = Number(data.healthScore ?? data["health score"] ?? data.trustScore ?? data["trust score"] ?? 100);
-
-    // Set last_seen timestamp
-    const lastSeen = data.last_seen || data.timestamp || Date.now();
+    const safeToOperate = (decision === "ACCESS_GRANTED") && (isi >= 70);
+    const lastSeen = data.lastSeen || Date.now();
 
     return {
-        motor_status: motorStatus,
-        relay_status: relayStatus,
-        isi_score: isiVal,
-        safe_to_operate: safeToOperate,
-        decision: safeToOperate ? "SAFE TO OPERATE" : "UNSAFE TO OPERATE",
-        health_score: healthScore,
-        rfid_status: data.rfidStatus || data["Rfid status"] || "VALID",
-        tamper_status: data.tamperStatus || data["Tamper status"] || "SAFE",
-        last_seen: lastSeen
+        healthScore: healthScore,
+        isi: isi,
+        trustScore: trustScore,
+        rfidStatus: rfidStatus,
+        tamperStatus: tamperStatus,
+        motorStatus: motorStatus,
+        decision: decision,
+        safeToOperate: safeToOperate,
+        relay_status: (decision === "ACCESS_GRANTED" || safeToOperate) ? "ON" : "OFF",
+        motor_status: motorStatus === "RUNNING" ? "RUNNING" : "STOPPED",
+        lastSeen: lastSeen
     };
 }
 
@@ -88,12 +89,11 @@ function normalizeLiveData(raw) {
 function computeLiveMetrics() {
     const live = window.ZGUARD_STATE.live;
     const rfidLogs = window.ZGUARD_STATE.rfidLogs;
-    const secEvents = window.ZGUARD_STATE.securityEvents;
 
     // 1. Online Device Count
     window.ZGUARD_STATE.onlineDevices = (window.ZGUARD_STATE.connectionStatus === "live") ? 1 : 0;
 
-    // 2. Compute Today's Unauthorized Scans Count
+    // 2. Unauthorized Scans Today Count
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
     const todayMs = startOfToday.getTime();
@@ -109,70 +109,30 @@ function computeLiveMetrics() {
     }
     window.ZGUARD_STATE.unauthorizedToday = unauthCount;
 
-    // 3. Health Score
-    if (live && typeof live.health_score === 'number') {
-        window.ZGUARD_STATE.healthScore = live.health_score;
+    if (live) {
+        window.ZGUARD_STATE.healthScore = live.healthScore;
+        window.ZGUARD_STATE.isiScore = live.isi;
+        window.ZGUARD_STATE.trustScore = live.trustScore;
+        window.ZGUARD_STATE.safeToOperate = live.safeToOperate;
     }
 }
 
 /**
- * Computes ISI — Industrial Security Index (0-100%)
- */
-function computeIsiScore() {
-    const rfidLogs = window.ZGUARD_STATE.rfidLogs || [];
-    const connectionStatus = window.ZGUARD_STATE.connectionStatus;
-    const live = window.ZGUARD_STATE.live;
-
-    if (!live || connectionStatus !== "live") {
-        return;
-    }
-
-    if (typeof live.isi_score === 'number') {
-        window.ZGUARD_STATE.isiScore = Math.max(0, Math.min(100, live.isi_score));
-        window.ZGUARD_STATE.safeToOperate = Boolean(live.safe_to_operate);
-        return;
-    }
-
-    let authRatio = 100;
-    if (rfidLogs.length > 0) {
-        const authScans = rfidLogs.filter(l => l.status === "AUTHORIZED").length;
-        authRatio = Math.round((authScans / rfidLogs.length) * 100);
-    }
-    window.ZGUARD_STATE.isiAuthRatio = authRatio;
-
-    let faultScore = 100;
-    if (live.relay_status === "OFF") faultScore -= 30;
-    if (window.ZGUARD_STATE.unauthorizedToday > 0) faultScore -= Math.min(40, window.ZGUARD_STATE.unauthorizedToday * 10);
-    window.ZGUARD_STATE.isiFaultScore = Math.max(0, faultScore);
-
-    const composite = Math.round((authRatio * 0.6) + (window.ZGUARD_STATE.isiFaultScore * 0.4));
-    window.ZGUARD_STATE.isiScore = Math.max(0, Math.min(100, composite));
-    window.ZGUARD_STATE.safeToOperate = (window.ZGUARD_STATE.isiScore >= 70 && live.relay_status !== "OFF");
-}
-
-/**
- * Evaluates last_seen timestamp staleness (> 15s)
+ * Evaluates lastSeen timestamp staleness (> 10s)
  */
 function evaluateConnectionStatus(liveData) {
-    if (!liveData) {
+    if (!liveData || !liveData.lastSeen) {
         return "waiting";
     }
     const now = Date.now();
-    const lastSeenTime = typeof liveData.last_seen === 'number' ? liveData.last_seen : new Date(liveData.last_seen).getTime();
+    const lastSeenTime = typeof liveData.lastSeen === 'number' ? liveData.lastSeen : new Date(liveData.lastSeen).getTime();
     const diffSeconds = (now - lastSeenTime) / 1000;
 
-    if (diffSeconds > 15) {
+    if (diffSeconds > 10) {
         return "offline";
     }
     return "live";
 }
-
-const DEFAULT_CREDENTIALS = {
-    apiKey: "AIzaSyBqiX3X0IP20UZrL-hAuBKbRH8jkq2HnLY",
-    databaseURL: "https://z-guard-default-rtdb.asia-southeast1.firebasedatabase.app",
-    projectId: "z-guard",
-    deviceId: "ESP32-01"
-};
 
 /**
  * Load credentials from localStorage or fallback to default
@@ -182,7 +142,7 @@ function getStoredCredentials() {
         const stored = localStorage.getItem(STORAGE_KEY);
         if (stored) {
             const parsed = JSON.parse(stored);
-            if (parsed.databaseURL && !parsed.databaseURL.includes("your-app")) {
+            if (parsed.databaseURL && parsed.databaseURL.includes("asia-southeast1")) {
                 return parsed;
             }
         }
@@ -221,12 +181,12 @@ function checkBackendLlmStatus() {
             }
         })
         .catch(err => {
-            console.log("[ZGuard Config Check] Local Python backend API server not reachable on localhost:5000.");
+            console.log("[ZGuard Config Check] Local Python backend server not reachable on localhost:5000.");
         });
 }
 
 /**
- * Initialize Firebase RTDB connection using user's configured credentials
+ * Initialize Firebase RTDB connection to devices/ESP32-01/live
  */
 function initFirebaseClient() {
     checkBackendLlmStatus();
@@ -271,51 +231,36 @@ function startFirebaseListeners(config) {
         const db = firebase.database();
         const deviceId = window.ZGUARD_STATE.deviceId;
 
-        console.log(`[ZGuard RTDB] Connected to ${config.databaseURL}. Subscribing to RTDB telemetry...`);
+        console.log(`[ZGuard RTDB] Listening to Canonical Path: /devices/${deviceId}/live at ${config.databaseURL}`);
 
-        // Handler function for live snapshot updates
-        const handleLiveSnapshot = (snapshot) => {
+        // Listen ONLY to Canonical Path /devices/ESP32-01/live
+        db.ref(`/devices/${deviceId}/live`).on('value', (snapshot) => {
             const val = snapshot.val();
             if (val) {
-                console.log("[ZGuard Realtime Telemetry Received]", val);
-                const normalized = normalizeLiveData(val);
-                if (normalized) {
-                    window.ZGUARD_STATE.live = normalized;
-                    window.ZGUARD_STATE.connectionStatus = "live";
-                    window.ZGUARD_STATE.safeToOperate = normalized.safe_to_operate;
-                    window.ZGUARD_STATE.isiScore = normalized.isi_score;
-                    window.ZGUARD_STATE.healthScore = normalized.health_score;
+                console.log("[ZGuard Telemetry Received]", val);
+                const canonical = parseCanonicalLiveData(val);
+                if (canonical) {
+                    window.ZGUARD_STATE.live = canonical;
+                    window.ZGUARD_STATE.connectionStatus = evaluateConnectionStatus(canonical);
                     notifySubscribers();
                 }
             }
-        };
+        });
 
-        // Subscribe to root /, /zguard, /devices/{deviceId}/live, /live
-        db.ref(`/zguard`).on('value', handleLiveSnapshot);
-        db.ref(`/devices/${deviceId}/live`).on('value', handleLiveSnapshot);
-        db.ref(`/live`).on('value', handleLiveSnapshot);
-        db.ref(`/`).on('value', handleLiveSnapshot);
-
-        // Handler function for rfid_log updates
-        const handleRfidSnapshot = (snapshot) => {
+        // Listen to /devices/ESP32-01/rfid_log
+        db.ref(`/devices/${deviceId}/rfid_log`).limitToLast(50).on('value', (snapshot) => {
             const val = snapshot.val();
             if (!val) return;
             const logs = [];
-            if (Array.isArray(val)) {
-                val.forEach((item, idx) => logs.unshift({ id: idx, ...item }));
-            } else if (typeof val === 'object') {
+            if (typeof val === 'object') {
                 Object.keys(val).forEach(key => logs.unshift({ id: key, ...val[key] }));
             }
             window.ZGUARD_STATE.rfidLogs = logs;
             notifySubscribers();
-        };
+        });
 
-        db.ref(`/devices/${deviceId}/rfid_log`).limitToLast(50).on('value', handleRfidSnapshot);
-        db.ref(`/zguard/rfid_log`).limitToLast(50).on('value', handleRfidSnapshot);
-        db.ref(`/rfid_log`).limitToLast(50).on('value', handleRfidSnapshot);
-
-        // Handler function for security_events
-        const handleSecuritySnapshot = (snapshot) => {
+        // Listen to /devices/ESP32-01/security_events
+        db.ref(`/devices/${deviceId}/security_events`).limitToLast(50).on('value', (snapshot) => {
             const val = snapshot.val();
             if (!val) return;
             const events = [];
@@ -323,29 +268,8 @@ function startFirebaseListeners(config) {
                 Object.keys(val).forEach(key => events.unshift({ id: key, ...val[key] }));
             }
             window.ZGUARD_STATE.securityEvents = events;
-            if (window.triggerSecurityParticleBurst) {
-                window.triggerSecurityParticleBurst();
-            }
             notifySubscribers();
-        };
-
-        db.ref(`/devices/${deviceId}/security_events`).limitToLast(50).on('value', handleSecuritySnapshot);
-        db.ref(`/zguard/security_events`).limitToLast(50).on('value', handleSecuritySnapshot);
-
-        // Handler function for ai_incidents
-        const handleAiSnapshot = (snapshot) => {
-            const val = snapshot.val();
-            if (!val) return;
-            const incidents = [];
-            if (typeof val === 'object') {
-                Object.keys(val).forEach(key => incidents.unshift({ id: key, ...val[key] }));
-            }
-            window.ZGUARD_STATE.aiIncidents = incidents;
-            notifySubscribers();
-        };
-
-        db.ref(`/devices/${deviceId}/ai_incidents`).limitToLast(20).on('value', handleAiSnapshot);
-        db.ref(`/zguard/ai_incidents`).limitToLast(20).on('value', handleAiSnapshot);
+        });
 
         // Connection heartbeat monitor
         setInterval(() => {
@@ -356,7 +280,7 @@ function startFirebaseListeners(config) {
                     notifySubscribers();
                 }
             }
-        }, 5000);
+        }, 3000);
 
     } catch (e) {
         console.error("[ZGuard Listener Error]", e);

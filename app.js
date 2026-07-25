@@ -211,10 +211,11 @@ function renderZGuardUI(state) {
 
     if (twinDevId) twinDevId.textContent = state.deviceId;
     if (state.live) {
-        if (twinRelay) twinRelay.textContent = state.live.relay_status || '--';
-        if (twinMotor) twinMotor.textContent = state.live.motor_status || '--';
+        if (twinRelay) twinRelay.textContent = (state.live.decision === "ACCESS_GRANTED" || state.safeToOperate) ? "ON" : "OFF";
+        if (twinMotor) twinMotor.textContent = state.live.motorStatus || state.live.motor_status || '--';
         if (twinLastSeen) {
-            const timeStr = state.live.last_seen ? new Date(state.live.last_seen).toLocaleTimeString() : '--';
+            const timeVal = state.live.lastSeen || state.live.last_seen;
+            const timeStr = timeVal ? new Date(timeVal).toLocaleTimeString() : '--';
             twinLastSeen.textContent = timeStr;
         }
     }
