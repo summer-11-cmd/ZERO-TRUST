@@ -41,7 +41,7 @@
             <nav class="nav-links" id="mainTabNav">
                 <button class="nav-tab-btn active" data-tab="tab-overview">Overview</button>
                 <button class="nav-tab-btn" data-tab="tab-device">Device Setup & Control</button>
-                <button class="nav-tab-btn" data-tab="tab-rfid">RFID Access Log</button>
+                <button class="nav-tab-btn" data-tab="tab-rfid">RFID Validation Status</button>
                 <button class="nav-tab-btn" data-tab="tab-faults">Fault Detection</button>
                 <button class="nav-tab-btn" data-tab="tab-ai">AI Threat Agents</button>
             </nav>
@@ -258,51 +258,52 @@
             </div>
         </section>
 
-        <!-- TAB 3: REAL-TIME RFID ACCESS LOG -->
+        <!-- TAB 3: RFID VALIDATION STATUS -->
         <section class="tab-pane" id="tab-rfid">
             <div class="overview-header-row">
-                <h1 class="page-title">RFID Access Audit Log</h1>
-                <span class="log-count-badge" id="rfidLogCountBadge">0 Logs</span>
+                <h1 class="page-title">RFID Authorization Status</h1>
+                <span class="device-target-tag">Live Firebase Reader Node</span>
             </div>
 
-            <div class="card-panel">
-                <!-- Log Filters Bar -->
-                <div class="filter-bar">
-                    <div class="filter-group">
-                        <input type="text" id="filterSearch" placeholder="Search UID or Operator Name...">
-                    </div>
-
-                    <div class="filter-group">
-                        <input type="date" id="filterDate" title="Filter by date">
-                    </div>
-
-                    <div class="filter-group">
-                        <select id="filterStatus">
-                            <option value="ALL">All Scan Statuses</option>
-                            <option value="AUTHORIZED">AUTHORIZED Only</option>
-                            <option value="UNAUTHORIZED">UNAUTHORIZED Only</option>
-                        </select>
-                    </div>
-
-                    <button class="btn btn-glass" id="btnResetFilters">Reset Filters</button>
+            <div class="rfid-validation-card">
+                <div class="rfid-card-header">
+                    <h3><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="7" y1="8" x2="17" y2="8"/><line x1="7" y1="12" x2="13" y2="12"/><circle cx="16" cy="15" r="1.5"/></svg> Real-Time RFID Card Validation</h3>
+                    <span class="operational-status-pill status-safe" id="rfidValidationPill">
+                        <span class="pulse-dot"></span>
+                        <span id="rfidValidationPillText">RFID VALID</span>
+                    </span>
                 </div>
 
-                <div class="table-responsive">
-                    <table class="resources-table">
-                        <thead>
-                            <tr>
-                                <th>Timestamp</th>
-                                <th>Date</th>
-                                <th>Card UID</th>
-                                <th>User Name</th>
-                                <th>Zero Trust Status</th>
-                                <th class="text-right">Device ID</th>
-                            </tr>
-                        </thead>
-                        <tbody id="rfidTableBody">
-                            <tr><td colspan="6" class="text-center text-muted">Waiting for ESP32-01 RFID scan data...</td></tr>
-                        </tbody>
-                    </table>
+                <div class="rfid-validation-body">
+                    <div class="rfid-big-status-box" id="rfidBigStatusBox">
+                        <div class="status-big-icon" id="rfidBigIcon">
+                            <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                        </div>
+                        <div class="status-big-text" id="rfidBigStatusText">RFID CARD VALID</div>
+                        <p class="status-big-sub" id="rfidBigStatusSub">Zero-Trust Access Granted — Registered Hardware Credential</p>
+                    </div>
+
+                    <div class="rfid-details-grid">
+                        <div class="rfid-detail-item">
+                            <span class="detail-label">Scanned Card UID</span>
+                            <strong class="detail-val font-mono text-cyan" id="rfidCardUidVal">A3-89-F1-02</strong>
+                        </div>
+
+                        <div class="rfid-detail-item">
+                            <span class="detail-label">Validation Result</span>
+                            <strong class="detail-val text-emerald" id="rfidResultVal">VALID / AUTHORIZED</strong>
+                        </div>
+
+                        <div class="rfid-detail-item">
+                            <span class="detail-label">Tamper Status</span>
+                            <strong class="detail-val" id="rfidTamperVal">SAFE</strong>
+                        </div>
+
+                        <div class="rfid-detail-item">
+                            <span class="detail-label">Last RFID Update</span>
+                            <strong class="detail-val text-dim" id="rfidTimeVal">--</strong>
+                        </div>
+                    </div>
                 </div>
             </div>
         </section>

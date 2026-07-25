@@ -793,15 +793,121 @@ input:focus, select:focus {
     display: flex; align-items: center; justify-content: space-between;
 }
 
-/* Responsive */
-@media (max-width: 992px) {
-    .overview-metrics-grid { grid-template-columns: repeat(2, 1fr); }
-    .twin-body-grid { grid-template-columns: 1fr; }
-    .ai-grid, .faults-grid { grid-template-columns: 1fr; }
+/* RFID Validation Status Panel */
+.rfid-validation-card {
+    background: #ffffff;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
 }
 
-@media (max-width: 640px) {
-    .overview-metrics-grid { grid-template-columns: 1fr; }
-    .monitoring-metrics-grid { grid-template-columns: 1fr; }
-    .nav-links { display: none; }
+.rfid-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.2rem 1.6rem;
+    border-bottom: 1px solid var(--border-color);
+    background: #ffffff;
+}
+
+.rfid-card-header h3 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-main);
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.rfid-validation-body {
+    padding: 2rem;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    align-items: center;
+}
+
+.rfid-big-status-box {
+    background: var(--bg-emerald-soft);
+    border: 2px solid #a7f3d0;
+    border-radius: 16px;
+    padding: 2.5rem 1.5rem;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.8rem;
+    transition: all 0.3s ease;
+}
+
+.rfid-big-status-box.status-invalid {
+    background: var(--bg-rose-soft);
+    border-color: #fecdd3;
+}
+
+.status-big-icon {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    background: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--emerald-600);
+    box-shadow: var(--shadow-sm);
+}
+
+.rfid-big-status-box.status-invalid .status-big-icon {
+    color: var(--rose-600);
+}
+
+.status-big-text {
+    font-size: 1.35rem;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    color: var(--emerald-600);
+}
+
+.rfid-big-status-box.status-invalid .status-big-text {
+    color: var(--rose-600);
+}
+
+.status-big-sub {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.rfid-details-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.rfid-detail-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.2rem;
+    background: var(--bg-card-sub);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+}
+
+.detail-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-dim);
+}
+
+.detail-val {
+    font-size: 0.95rem;
+    font-weight: 700;
+}
+
+@media (max-width: 768px) {
+    .rfid-validation-body {
+        grid-template-columns: 1fr;
+    }
 }

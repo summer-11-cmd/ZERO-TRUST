@@ -5,7 +5,6 @@
 document.addEventListener('DOMContentLoaded', () => {
     initNavigationTabs();
     initSetupForm();
-    initRfidLogFilters();
     initSettingsModal();
 
     // Initialize 3D Device Twin Canvas Panel
@@ -243,8 +242,8 @@ function renderZGuardUI(state) {
         }
     }
 
-    // E. Render RFID Logs & Filters
-    renderFilteredRfidLogs(state.rfidLogs);
+    // E. Render RFID Validation Status
+    renderRfidValidationStatus(state);
 
     // F. Render Fault Detection Status
     renderFaultDetection(state);
@@ -254,86 +253,60 @@ function renderZGuardUI(state) {
 }
 
 /* ==========================================================================
-   5. Real-time RFID Log Table Renderer with Search & Status Filters
+   5. Real-time RFID Validation Status Card Renderer
    ========================================================================== */
-function initRfidLogFilters() {
-    const searchInput = document.getElementById('filterSearch');
-    const dateInput = document.getElementById('filterDate');
-    const statusSelect = document.getElementById('filterStatus');
-    const resetBtn = document.getElementById('btnResetFilters');
+function renderRfidValidationStatus(state) {
+    const pill = document.getElementById('rfidValidationPill');
+    const pillText = document.getElementById('rfidValidationPillText');
+    const bigBox = document.getElementById('rfidBigStatusBox');
+    const bigIcon = document.getElementById('rfidBigIcon');
+    const bigText = document.getElementById('rfidBigStatusText');
+    const bigSub = document.getElementById('rfidBigStatusSub');
+    const uidVal = document.getElementById('rfidCardUidVal');
+    const resultVal = document.getElementById('rfidResultVal');
+    const tamperVal = document.getElementById('rfidTamperVal');
+    const timeVal = document.getElementById('rfidTimeVal');
 
-    if (searchInput) searchInput.addEventListener('input', () => renderFilteredRfidLogs(window.ZGUARD_STATE.rfidLogs));
-    if (dateInput) dateInput.addEventListener('change', () => renderFilteredRfidLogs(window.ZGUARD_STATE.rfidLogs));
-    if (statusSelect) statusSelect.addEventListener('change', () => renderFilteredRfidLogs(window.ZGUARD_STATE.rfidLogs));
-    if (resetBtn) {
-        resetBtn.addEventListener('click', () => {
-            if (searchInput) searchInput.value = "";
-            if (dateInput) dateInput.value = "";
-            if (statusSelect) statusSelect.value = "ALL";
-            renderFilteredRfidLogs(window.ZGUARD_STATE.rfidLogs);
-        });
+    const live = state.live || {};
+    const rfidStatus = (live.rfidStatus || live.rfid_status || "VALID").toString().toUpperCase();
+    const isValid = (rfidStatus === "VALID" || rfidStatus === "AUTHORIZED");
+
+    if (pill) {
+        pill.className = isValid ? "operational-status-pill status-safe" : "operational-status-pill status-unsafe";
     }
-}
-
-function renderFilteredRfidLogs(logs) {
-    const tableBody = document.getElementById('rfidTableBody');
-    const badge = document.getElementById('rfidLogCountBadge');
-    const searchInput = document.getElementById('filterSearch');
-    const dateInput = document.getElementById('filterDate');
-    const statusSelect = document.getElementById('filterStatus');
-
-    if (!tableBody) return;
-
-    let filtered = logs || [];
-
-    if (searchInput && searchInput.value.trim()) {
-        const q = searchInput.value.trim().toLowerCase();
-        filtered = filtered.filter(l => 
-            (l.uid && l.uid.toLowerCase().includes(q)) || 
-            (l.user_name && l.user_name.toLowerCase().includes(q))
-        );
+    if (pillText) {
+        pillText.textContent = isValid ? "RFID VALID" : "RFID UNAUTHORIZED";
     }
-
-    if (dateInput && dateInput.value) {
-        const targetDateStr = dateInput.value;
-        filtered = filtered.filter(l => {
-            if (!l.timestamp) return false;
-            const logDate = new Date(l.timestamp);
-            const yyyy = logDate.getFullYear();
-            const mm = String(logDate.getMonth() + 1).padStart(2, '0');
-            const dd = String(logDate.getDate()).padStart(2, '0');
-            return `${yyyy}-${mm}-${dd}` === targetDateStr;
-        });
+    if (bigBox) {
+        bigBox.className = isValid ? "rfid-big-status-box" : "rfid-big-status-box status-invalid";
     }
-
-    if (statusSelect && statusSelect.value !== "ALL") {
-        filtered = filtered.filter(l => l.status === statusSelect.value);
+    if (bigIcon) {
+        bigIcon.innerHTML = isValid 
+            ? `<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`
+            : `<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`;
     }
-
-    if (badge) badge.textContent = `${filtered.length} Logs`;
-
-    if (filtered.length === 0) {
-        tableBody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">No matching RFID scan logs found.</td></tr>`;
-        return;
+    if (bigText) {
+        bigText.textContent = isValid ? "RFID CARD VALID" : "UNAUTHORIZED RFID SCAN";
     }
-
-    tableBody.innerHTML = filtered.map(l => {
-        const timeObj = l.timestamp ? new Date(l.timestamp) : new Date();
-        const timeStr = timeObj.toLocaleTimeString();
-        const dateStr = timeObj.toLocaleDateString();
-        const statusClass = l.status === "AUTHORIZED" ? "authorized" : "unauthorized";
-
-        return `
-            <tr>
-                <td class="text-dim">${timeStr}</td>
-                <td class="text-dim">${dateStr}</td>
-                <td class="font-mono text-cyan">${l.uid || 'N/A'}</td>
-                <td>${l.user_name || 'Operator'}</td>
-                <td><span class="status-badge-cell ${statusClass}">${l.status}</span></td>
-                <td class="font-mono text-dim text-right">${window.ZGUARD_STATE.deviceId}</td>
-            </tr>
-        `;
-    }).join('');
+    if (bigSub) {
+        bigSub.textContent = isValid 
+            ? "Zero-Trust Access Granted — Authorized Edge Card Recognized" 
+            : "Zero-Trust Access Denied — Unregistered / Tampered Card";
+    }
+    if (uidVal) {
+        uidVal.textContent = live.rfidUid || live.uid || "A3-89-F1-02";
+    }
+    if (resultVal) {
+        resultVal.textContent = isValid ? "VALID / AUTHORIZED" : "UNAUTHORIZED / INVALID";
+        resultVal.className = isValid ? "detail-val text-emerald" : "detail-val text-rose";
+    }
+    if (tamperVal) {
+        tamperVal.textContent = live.tamperStatus || live.tamper_status || "SAFE";
+    }
+    if (timeVal) {
+        const t = live.lastSeen || live.last_seen;
+        timeVal.textContent = t ? new Date(t).toLocaleTimeString() : new Date().toLocaleTimeString();
+    }
 }
 
 /* ==========================================================================
