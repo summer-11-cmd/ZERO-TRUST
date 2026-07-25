@@ -53,16 +53,24 @@ last_alert_time = {}      # { f"{device_id}_{event_type}": timestamp }
 
 ALERT_COOLDOWN_SEC = 60
 
+firebase_initialized = False
+
 def init_firebase():
-    """Initialize Firebase Admin SDK"""
+    """Initialize Firebase Admin SDK if serviceAccountKey.json is available, otherwise use REST API"""
+    global firebase_initialized
     if not firebase_admin._apps:
         if os.path.exists(FIREBASE_SERVICE_ACCOUNT_PATH):
-            cred = credentials.Certificate(FIREBASE_SERVICE_ACCOUNT_PATH)
-            firebase_admin.initialize_app(cred, {'databaseURL': FIREBASE_DB_URL})
-            print(f"[ZGuard Backend] Firebase Admin SDK initialized with {FIREBASE_SERVICE_ACCOUNT_PATH}")
+            try:
+                cred = credentials.Certificate(FIREBASE_SERVICE_ACCOUNT_PATH)
+                firebase_admin.initialize_app(cred, {'databaseURL': FIREBASE_DB_URL})
+                print(f"[ZGuard Backend] Firebase Admin SDK initialized with {FIREBASE_SERVICE_ACCOUNT_PATH}")
+                firebase_initialized = True
+            except Exception as e:
+                print(f"[ZGuard Backend] Service account error: {e}. Using direct REST API.")
+                firebase_initialized = False
         else:
-            print(f"[ZGuard Backend] Note: '{FIREBASE_SERVICE_ACCOUNT_PATH}' not present. Using default DB URL listener.")
-            firebase_admin.initialize_app(options={'databaseURL': FIREBASE_DB_URL})
+            print(f"[ZGuard Backend] Note: '{FIREBASE_SERVICE_ACCOUNT_PATH}' not present. Using REST API listener for {FIREBASE_DB_URL}.")
+            firebase_initialized = False
 
 def update_env_llm_key(new_key):
     """Updates or appends LLM_API_KEY in the backend .env file"""
@@ -272,14 +280,27 @@ Time: {formatted_time}
 
 def monitor_live_telemetry_loop():
     """Continuous background loop evaluating live relay state and heartbeat staleness at /devices/ESP32-01/live"""
+    db_url = FIREBASE_DB_URL.rstrip('/')
     while True:
         try:
             time.sleep(4)
-            dev_data = db.reference("/devices/ESP32-01/live").get()
+            dev_data = None
+            if firebase_initialized:
+                try:
+                    dev_data = db.reference("/devices/ESP32-01/live").get()
+                except Exception:
+                    pass
+
+            if not dev_data:
+                # Direct REST API Fallback — Requires ZERO serviceAccountKey.json or ADC credentials
+                res = requests.get(f"{db_url}/devices/ESP32-01/live.json", timeout=5)
+                if res.status_code == 200:
+                    dev_data = res.json()
+
             if dev_data and isinstance(dev_data, dict):
                 now_ms = time.time() * 1000
                 decision = str(dev_data.get("decision", "ACCESS_DENIED")).upper()
-                last_seen = dev_data.get("lastSeen", now_ms)
+                last_seen = dev_data.get("lastSeen", dev_data.get("last_seen", now_ms))
                 
                 if isinstance(last_seen, str):
                     try:
