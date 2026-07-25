@@ -1,6 +1,5 @@
 /* ==========================================================================
    ZGUARD — Single-Device Firebase RTDB Client & State Bus
-   Canonical Path: /devices/ESP32-01/live
    ========================================================================== */
 
 // Default Credentials Key in localStorage
@@ -51,22 +50,30 @@ function notifySubscribers() {
 }
 
 /**
- * Parses canonical schema from /devices/ESP32-01/live
+ * Parses telemetry payloads from /devices/ESP32-01/live, /zguard, /live or /
  */
-function parseCanonicalLiveData(data) {
-    if (!data || typeof data !== 'object') return null;
+function parseCanonicalLiveData(raw) {
+    if (!raw || typeof raw !== 'object') return null;
 
-    const motorStatus = (data.motorStatus || "STOPPED").toString().toUpperCase();
+    // Support nested zguard, live, ESP32-01 or direct object
+    const data = raw.zguard || raw.live || raw["ESP32-01"] || raw;
+
+    const rawMotor = (data.motorStatus || data["motor status"] || data.motor_status || "STOPPED").toString().toUpperCase();
+    const motorStatus = (rawMotor === "RUNNING" || rawMotor === "ON") ? "RUNNING" : (rawMotor === "STOPPED" || rawMotor === "OFF" ? "STOPPED" : rawMotor);
+
+    const rawRelay = (data.relayStatus || data["relay status"] || data.relay_status || "ON").toString().toUpperCase();
+    const relayStatus = (rawRelay === "OFF" || rawRelay === "CUT" || rawRelay === "DISABLED") ? "OFF" : "ON";
+
     const decision = (data.decision || "ACCESS_DENIED").toString().toUpperCase();
-    const rfidStatus = (data.rfidStatus || "UNKNOWN").toString().toUpperCase();
-    const tamperStatus = (data.tamperStatus || "SAFE").toString().toUpperCase();
+    const rfidStatus = (data.rfidStatus || data["Rfid status"] || "UNKNOWN").toString().toUpperCase();
+    const tamperStatus = (data.tamperStatus || data["Tamper status"] || "SAFE").toString().toUpperCase();
 
-    const isi = typeof data.isi === 'number' ? data.isi : 100;
-    const healthScore = typeof data.healthScore === 'number' ? data.healthScore : 100;
-    const trustScore = typeof data.trustScore === 'number' ? data.trustScore : 100;
+    const isi = Number(data.isi ?? data.ISI ?? data.isi_score ?? data.isiScore ?? 100);
+    const healthScore = Number(data.healthScore ?? data["health score"] ?? data.trustScore ?? data["trust score"] ?? 100);
+    const trustScore = Number(data.trustScore ?? data["trust score"] ?? 100);
 
-    const safeToOperate = (decision === "ACCESS_GRANTED") && (isi >= 70);
-    const lastSeen = data.lastSeen || Date.now();
+    const safeToOperate = (decision === "ACCESS_GRANTED" || decision === "SAFE TO OPERATE") || (data.safe_to_operate === true) || (data.safeToOperate === true) || (isi >= 70 && decision !== "FAULT DETECTED" && relayStatus !== "OFF");
+    const lastSeen = data.lastSeen || data.last_seen || data.timestamp || Date.now();
 
     return {
         healthScore: healthScore,
@@ -77,7 +84,7 @@ function parseCanonicalLiveData(data) {
         motorStatus: motorStatus,
         decision: decision,
         safeToOperate: safeToOperate,
-        relay_status: (decision === "ACCESS_GRANTED" || safeToOperate) ? "ON" : "OFF",
+        relay_status: (safeToOperate) ? "ON" : "OFF",
         motor_status: motorStatus === "RUNNING" ? "RUNNING" : "STOPPED",
         lastSeen: lastSeen
     };
@@ -118,7 +125,7 @@ function computeLiveMetrics() {
 }
 
 /**
- * Evaluates lastSeen timestamp staleness (> 10s)
+ * Evaluates lastSeen timestamp staleness (> 15s)
  */
 function evaluateConnectionStatus(liveData) {
     if (!liveData || !liveData.lastSeen) {
@@ -128,7 +135,7 @@ function evaluateConnectionStatus(liveData) {
     const lastSeenTime = typeof liveData.lastSeen === 'number' ? liveData.lastSeen : new Date(liveData.lastSeen).getTime();
     const diffSeconds = (now - lastSeenTime) / 1000;
 
-    if (diffSeconds > 10) {
+    if (diffSeconds > 15) {
         return "offline";
     }
     return "live";
@@ -186,7 +193,7 @@ function checkBackendLlmStatus() {
 }
 
 /**
- * Initialize Firebase RTDB connection to devices/ESP32-01/live
+ * Initialize Firebase RTDB connection
  */
 function initFirebaseClient() {
     checkBackendLlmStatus();
@@ -231,13 +238,12 @@ function startFirebaseListeners(config) {
         const db = firebase.database();
         const deviceId = window.ZGUARD_STATE.deviceId;
 
-        console.log(`[ZGuard RTDB] Listening to Canonical Path: /devices/${deviceId}/live at ${config.databaseURL}`);
+        console.log(`[ZGuard RTDB] Listening to ${config.databaseURL}...`);
 
-        // Listen ONLY to Canonical Path /devices/ESP32-01/live
-        db.ref(`/devices/${deviceId}/live`).on('value', (snapshot) => {
+        const handleLiveSnapshot = (snapshot) => {
             const val = snapshot.val();
             if (val) {
-                console.log("[ZGuard Telemetry Received]", val);
+                console.log("[ZGuard Realtime Telemetry Received]", val);
                 const canonical = parseCanonicalLiveData(val);
                 if (canonical) {
                     window.ZGUARD_STATE.live = canonical;
@@ -245,9 +251,15 @@ function startFirebaseListeners(config) {
                     notifySubscribers();
                 }
             }
-        });
+        };
 
-        // Listen to /devices/ESP32-01/rfid_log
+        // Listen to /devices/ESP32-01/live, /zguard, /live, and /
+        db.ref(`/devices/${deviceId}/live`).on('value', handleLiveSnapshot);
+        db.ref(`/zguard`).on('value', handleLiveSnapshot);
+        db.ref(`/live`).on('value', handleLiveSnapshot);
+        db.ref(`/`).on('value', handleLiveSnapshot);
+
+        // Listen to rfid_log
         db.ref(`/devices/${deviceId}/rfid_log`).limitToLast(50).on('value', (snapshot) => {
             const val = snapshot.val();
             if (!val) return;
@@ -258,16 +270,14 @@ function startFirebaseListeners(config) {
             window.ZGUARD_STATE.rfidLogs = logs;
             notifySubscribers();
         });
-
-        // Listen to /devices/ESP32-01/security_events
-        db.ref(`/devices/${deviceId}/security_events`).limitToLast(50).on('value', (snapshot) => {
+        db.ref(`/zguard/rfid_log`).limitToLast(50).on('value', (snapshot) => {
             const val = snapshot.val();
             if (!val) return;
-            const events = [];
+            const logs = [];
             if (typeof val === 'object') {
-                Object.keys(val).forEach(key => events.unshift({ id: key, ...val[key] }));
+                Object.keys(val).forEach(key => logs.unshift({ id: key, ...val[key] }));
             }
-            window.ZGUARD_STATE.securityEvents = events;
+            window.ZGUARD_STATE.rfidLogs = logs;
             notifySubscribers();
         });
 
