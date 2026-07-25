@@ -150,8 +150,15 @@ function evaluateConnectionStatus(liveData) {
     return "live";
 }
 
+const DEFAULT_CREDENTIALS = {
+    apiKey: "AIzaSyBqiX3X0IP20UZrL-hAuBKbRH8jkq2HnLY",
+    databaseURL: "https://z-guard-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "z-guard",
+    deviceId: "ESP32-01"
+};
+
 /**
- * Load credentials from localStorage
+ * Load credentials from localStorage or fallback to default
  */
 function getStoredCredentials() {
     try {
@@ -160,7 +167,7 @@ function getStoredCredentials() {
     } catch (e) {
         console.warn("[ZGuard Creds] Reading localStorage failed:", e);
     }
-    return null;
+    return DEFAULT_CREDENTIALS;
 }
 
 /**

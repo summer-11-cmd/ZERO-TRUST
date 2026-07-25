@@ -158,27 +158,46 @@ def start_config_api_server():
 
 def call_llm_security_analysis(device_id, recent_scans):
     """
-    Calls LLM API for advisory security incident evaluation.
+    Calls LLM API (Google Gemini or OpenAI) for advisory security incident evaluation.
     Wrapped in try/except with a safe rule-based fallback.
     """
     try:
         if LLM_API_KEY:
             prompt = f"Analyze these unauthorized RFID scans on industrial IoT Device '{device_id}': {json.dumps(recent_scans)}. Output valid JSON with keys: risk_score (1-100), reason, recommendation."
-            headers = {"Authorization": f"Bearer {LLM_API_KEY}", "Content-Type": "application/json"}
-            payload = {
-                "model": "gpt-3.5-turbo",
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.2
-            }
-            res = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload, timeout=8)
-            if res.status_code == 200:
-                content = res.json()['choices'][0]['message']['content']
-                parsed = json.loads(content)
-                return {
-                    "risk_score": parsed.get("risk_score", 85),
-                    "reason": parsed.get("reason", "Multiple unauthorized RFID burst scans detected."),
-                    "recommendation": parsed.get("recommendation", "Advisory: Inspect edge gateway card reader.")
+            
+            # Check if Gemini Key (AQ. or AIza...) vs OpenAI Key (sk-...)
+            if LLM_API_KEY.startswith("AQ.") or "AQ" in LLM_API_KEY or "gemini" in LLM_API_KEY.lower():
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={LLM_API_KEY}"
+                payload = {
+                    "contents": [{"parts": [{"text": prompt + " Reply ONLY in raw JSON format without markdown code blocks."}]}]
                 }
+                res = requests.post(url, json=payload, timeout=8)
+                if res.status_code == 200:
+                    data = res.json()
+                    text = data['candidates'][0]['content']['parts'][0]['text']
+                    clean_text = text.replace("```json", "").replace("```", "").strip()
+                    parsed = json.loads(clean_text)
+                    return {
+                        "risk_score": int(parsed.get("risk_score", 85)),
+                        "reason": parsed.get("reason", "Multiple unauthorized RFID burst scans detected."),
+                        "recommendation": parsed.get("recommendation", "Advisory: Inspect edge gateway card reader.")
+                    }
+            else:
+                headers = {"Authorization": f"Bearer {LLM_API_KEY}", "Content-Type": "application/json"}
+                payload = {
+                    "model": "gpt-3.5-turbo",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.2
+                }
+                res = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload, timeout=8)
+                if res.status_code == 200:
+                    content = res.json()['choices'][0]['message']['content']
+                    parsed = json.loads(content)
+                    return {
+                        "risk_score": int(parsed.get("risk_score", 85)),
+                        "reason": parsed.get("reason", "Multiple unauthorized RFID burst scans detected."),
+                        "recommendation": parsed.get("recommendation", "Advisory: Inspect edge gateway card reader.")
+                    }
     except Exception as e:
         print(f"[ZGuard LLM Fallback] {e}")
 
